@@ -1,7 +1,7 @@
 // 极简 Service Worker：让 Pages 站点可安装到桌面/主屏幕，并缓存应用外壳实现离线可用
 // 外部实时数据接口（行情/净值/K线等）一律只走网络，不做缓存，保证实时
-const SHELL = ['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './images/icon.svg'];
-const CACHE = 'fe-shell-v1';
+const SHELL = ['./', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
+const CACHE = 'fe-shell-v2';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
