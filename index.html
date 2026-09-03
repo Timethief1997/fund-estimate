@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b0d12">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <title>基金持仓实时估值 · 单文件版</title>
 <style>
 :root{
@@ -428,6 +432,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 </div>
 
 <script>
+// ============ PWA：注册 Service Worker（仅供真实 https 站点，file:// 下自动跳过） ============
+if('serviceWorker' in navigator && /^https:/.test(location.protocol)){
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
+}
 // ============ 本地持久化辅助（替代后端文件存档） ============
 const LS_SNAP='fv_snapshots', LS_FB='fv_feedback', LS_OPT='fv_optimlogs';
 const LS={
