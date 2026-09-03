@@ -133,6 +133,7 @@ select.inp{min-width:120px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;margin-bottom:14px;overflow:hidden}
 .card-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--panel2);border-bottom:1px solid var(--line);font-size:12px;font-weight:600;letter-spacing:.5px}
 .card-bd{padding:12px 14px}
+.grid2{display:grid;grid-template-columns:1fr 2fr;gap:14px}
 
 /* 基金主表 */
 .table-wrap{overflow-x:auto}
@@ -228,23 +229,40 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
   .market{grid-template-columns:1fr}
   .market-flow .ff-grid{grid-template-columns:1fr}
 
-  .table-wrap{-webkit-overflow-scrolling:touch;scrollbar-width:thin;-webkit-tap-highlight-color:transparent}
-  .table-wrap table{min-width:620px}
-  .nav-hist-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;-webkit-tap-highlight-color:transparent}
-  .nav-day-row{grid-template-columns:74px 1fr 1fr 68px 54px;gap:6px;padding:5px 6px;min-width:600px}
-  .nav-fund-hd{flex-direction:column;align-items:flex-start;gap:4px}
-
   table{font-size:11px}
   th,td{padding:8px 10px}
   .td-name b{font-size:12px}
   .cred-wrap{min-width:70px}
   .cred-bar{width:70px}
-  .rank-row{grid-template-columns:70px 1fr 60px}
-  .six{grid-template-columns:repeat(2,1fr)}
   .added-row{grid-template-columns:1fr 1fr 60px 28px}
   .card{margin-bottom:12px}
   .card-hd{flex-wrap:wrap;gap:8px}
   .card-hd .subtitle{width:100%;order:2}
+
+  /* 手机端：排名+明细 折叠为单列，避免被并排压窄 */
+  .grid2{grid-template-columns:1fr}
+
+  /* —— 涨跌排名：横向滑动，保证涨跌幅可读 —— */
+  #ranking{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;-webkit-tap-highlight-color:transparent}
+  #ranking::-webkit-scrollbar{display:none}
+  .rank-row{grid-template-columns:74px 1fr 64px;min-width:280px}
+
+  /* —— 收盘实际对比·历史回看：每个基金区独立横向滑动，表头吸顶，保证「记录」按钮可达 —— */
+  .table-wrap{-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;-webkit-tap-highlight-color:transparent}
+  .table-wrap::-webkit-scrollbar{display:none}
+  .table-wrap table{min-width:620px}
+  .nav-hist-wrap{display:flex;flex-direction:column;gap:8px}
+  .nav-fund{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;-webkit-tap-highlight-color:transparent}
+  .nav-fund::-webkit-scrollbar{display:none}
+  .nav-day-row{grid-template-columns:76px 1fr 1fr 66px 62px;gap:6px;padding:8px 6px;min-width:560px}
+  .nav-fund-hd{flex-direction:column;align-items:flex-start;gap:3px}
+
+  /* —— 六维评价·走势：2列紧凑布局，避免被拉成细长 —— */
+  .six{grid-template-columns:repeat(2,1fr);gap:8px}
+  .six .d{padding:12px}
+  .six .d .k{font-size:10px}
+  .six .d .val{font-size:15px;margin-top:6px}
+  .six .d .sub{font-size:10px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
 </style>
 </head>
@@ -349,7 +367,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     </div>
   </div>
 
-  <div class="grid2" style="display:grid;grid-template-columns:1fr 2fr;gap:14px">
+  <div class="grid2">
     <div class="card">
       <div class="card-hd">涨跌排名</div>
       <div class="card-bd" id="ranking"></div>
