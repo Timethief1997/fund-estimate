@@ -264,9 +264,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
   .six .d .val{font-size:15px;margin-top:6px}
   .six .d .sub{font-size:10px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 }
+
+/* —— 顶部页签切换：大盘资金流 / 基金估值 —— */
+.tabbar{display:flex;gap:8px;margin:0 0 14px}
+.tabbar .tab{flex:1;padding:9px 0;text-align:center;background:var(--panel2);border:1px solid var(--line2);border-radius:6px;color:var(--tx2);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;user-select:none;-webkit-tap-highlight-color:transparent}
+.tabbar .tab.on{background:linear-gradient(180deg,rgba(79,140,255,.16),rgba(79,140,255,.05));border-color:#4f8cff;color:#4f8cff}
+body[data-page="fund"] .p-flow{display:none}
+body[data-page="flow"] .p-fund{display:none}
 </style>
 </head>
-<body>
+<body data-page="fund">
 <div class="wrap">
 
   <header class="top">
@@ -293,13 +300,18 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 
   <div id="errmsg" style="color:var(--up);font-size:12px;margin-bottom:10px" class="hidden"></div>
 
-  <div class="market" id="market">
+  <div class="tabbar" id="tabbar">
+    <div class="tab on" data-page="flow">大盘资金流</div>
+    <div class="tab" data-page="fund">基金估值</div>
+  </div>
+
+  <div class="market p-flow" id="market">
     <div class="idx flat" id="i000001"><div class="n">上证指数</div><div class="v flat" id="m000001">--</div><div class="x">--</div></div>
     <div class="idx flat" id="i399001"><div class="n">深证成指</div><div class="v flat" id="m399001">--</div><div class="x">--</div></div>
     <div class="idx flat" id="i399006"><div class="n">创业板指</div><div class="v flat" id="m399006">--</div><div class="x">--</div></div>
   </div>
 
-  <div class="card">
+  <div class="card p-flow">
     <div class="card-hd">资金流向 · 主力净额排行 <span class="subtitle">数据源：新浪（直连，跨域受限时仅展示顶部状态）</span></div>
     <div class="card-bd">
       <div class="ff-stats" id="ffStats"></div>
@@ -316,14 +328,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     </div>
   </div>
 
-  <div class="card">
+  <div class="card p-flow">
     <div class="card-hd">大盘资金流 <span class="subtitle">数据源：新浪个股主力资金榜 Top100 聚合（直连）</span></div>
     <div class="card-bd">
       <div class="market-flow" id="marketFlow">加载中…</div>
     </div>
   </div>
 
-  <div class="card">
+  <div class="card p-fund">
     <div class="card-hd">收盘实际对比 · 历史回看 <span class="subtitle">估值每日自动存档于本设备 localStorage；「拉取实际净值」需数据源允许跨域，失败时请手填</span>
       <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
         <label class="hint" style="font-size:11px;color:var(--tx3)">回看天数</label>
@@ -350,14 +362,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     </div>
   </div>
 
-  <div class="card">
+  <div class="card p-flow">
     <div class="card-hd">板块资金活跃 · 行业ETF <span class="subtitle">数据源：腾讯行情 · 口径为涨跌幅+成交额（净流入源暂无）</span></div>
     <div class="card-bd">
       <div class="sector-flow" id="sectorFlow">加载中…</div>
     </div>
   </div>
 
-  <div class="card">
+  <div class="card p-fund">
     <div class="card-hd">实时估值 · 置信度</div>
     <div class="card-bd table-wrap">
       <table>
@@ -367,7 +379,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     </div>
   </div>
 
-  <div class="grid2">
+  <div class="grid2 p-fund">
     <div class="card">
       <div class="card-hd">涨跌排名</div>
       <div class="card-bd" id="ranking"></div>
@@ -378,7 +390,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     </div>
   </div>
 
-  <div class="card">
+  <div class="card p-fund">
     <div class="card-hd" style="cursor:pointer" id="toggleAdd">➕ 新增基金配置 ▾</div>
     <div class="card-bd hidden" id="addPanel">
       <div class="add-grid">
@@ -456,6 +468,20 @@ if('serviceWorker' in navigator && /^https:/.test(location.protocol)){
 }
 // ============ 本地持久化辅助（替代后端文件存档） ============
 const LS_SNAP='fv_snapshots', LS_FB='fv_feedback', LS_OPT='fv_optimlogs';
+
+// ============ 页面切换：大盘资金流 / 基金估值 ============
+(function(){
+  var bar=document.getElementById('tabbar'); if(!bar) return;
+  var btns=bar.querySelectorAll('.tab');
+  function go(page){
+    document.body.setAttribute('data-page', page);
+    btns.forEach(function(t){ t.classList.toggle('on', (t.getAttribute('data-page')||'')===page); });
+    try{ localStorage.setItem('fv_view', page); }catch(e){}
+  }
+  btns.forEach(function(t){ t.addEventListener('click', function(){ go(t.getAttribute('data-page')); }); });
+  var saved='fund'; try{ saved=localStorage.getItem('fv_view')||'fund'; }catch(e){}
+  go(saved);
+})();
 const LS={
   get(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } },
   set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
