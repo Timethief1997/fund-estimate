@@ -1245,7 +1245,7 @@ function renderHistory(){
       else if(fb && isFinite(fb.estimatePct)){ est=fb.estimatePct; src='fb'; }
       else if(recalc!==undefined && recalc!==null){ est=recalc; src='recalc'; }
       const actRow = actMap[f.code] && actMap[f.code][date];
-      const actual = (actRow && isFinite(actRow.navPct)) ? actRow.navPct : (fb && isFinite(fb.actualPct) ? fb.actualPct : null);
+      const actual = (actRow && isFinite(actRow.navPct)) ? Math.round(actRow.navPct*100)/100 : (fb && isFinite(fb.actualPct) ? Math.round(fb.actualPct*100)/100 : null);
       const estShow = est;
       const estTag = src==='recalc' ? '<span class="tag tag-recalc" title="基于现有方法用当日个股收盘涨跌幅回算">回算</span>' : (src==='snap' ? '<span class="tag tag-snap">估值</span>' : '');
       const missReason = estShow===null ? estimateMissReason(f,date) : '';
@@ -1302,7 +1302,7 @@ async function fetchActualsDirect(codes, days){
       const j=await jsonpLoad(`https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/CaihuiFundInfoService.getNav?symbol=${c}&page=1&num=${num}`);
       const rows=(j&&j.result&&j.result.data&&j.result.data.data)||[];
       const list=rows.map(x=>({ date:String(x.fbrq).slice(0,10), nav:parseFloat(x.jjjz)||0, navPct:0 }));
-      for(let i=0;i<list.length-1;i++){ const nu=list[i].nav, old=list[i+1].nav; if(old>0) list[i].navPct=(nu-old)/old*100; }
+      for(let i=0;i<list.length-1;i++){ const nu=list[i].nav, old=list[i+1].nav; if(old>0) list[i].navPct=Math.round((nu-old)/old*10000)/100; }
       out[c]=list;
     }catch(e){ out[c]={ error:e.message }; }
   }));
@@ -1416,7 +1416,7 @@ function recordHistoryRow(code, date){
   const row=wrap.querySelector(`.nav-day-row[data-code="${code}"][data-date="${date}"]`);
   if(!row) return;
   const inp=row.querySelector('.d-actual input');
-  const actual=inp && parseFloat(inp.value);
+  const actual=Math.round((inp && parseFloat(inp.value))*100)/100;
   if(!isFinite(actual)){ showToastMsg('请先填写实际收盘%'); return; }
   const f=FUNDS.find(x=>x.code===code); if(!f) return;
   const snap = (navState.snapshots.find(s=>s.date===date)||{}).snap || {};
