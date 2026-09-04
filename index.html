@@ -271,10 +271,20 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .tabbar .tab.on{background:linear-gradient(180deg,rgba(79,140,255,.16),rgba(79,140,255,.05));border-color:#4f8cff;color:#4f8cff}
 body[data-page="fund"] .p-flow{display:none}
 body[data-page="flow"] .p-fund{display:none}
+.navbase{display:inline-flex;gap:4px;margin:0 0 16px;padding:4px;background:var(--panel);border:1px solid var(--line);border-radius:8px;flex-wrap:wrap}
+.navbase a{font-size:13px;font-weight:500;color:var(--tx2);text-decoration:none;padding:7px 18px;border-radius:6px;transition:all .15s;cursor:pointer;border:1px solid transparent}
+.navbase a:hover{color:var(--tx);background:var(--panel3)}
+.navbase a.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 0 1px var(--accent) inset}
 </style>
 </head>
 <body data-page="fund">
 <div class="wrap">
+
+  <div class="navbase">
+    <a href="market.html">大盘资金</a>
+    <a href="index.html" class="on">基金估值</a>
+    <a href="fund-screener.html">基金筛选</a>
+  </div>
 
   <header class="top">
     <h1><span class="dot"></span>基金持仓实时估值 <span class="subtitle">fund-portfolio-estimate-v2 · 单文件离线版</span></h1>

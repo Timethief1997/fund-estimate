@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>基金筛选 · 近期涨势</title>
+<style>
+  :root{
+    --bg:#0d1117; --surface:#161b22; --surface2:#1c2330; --line:#2d333b;
+    --tx:#e6edf3; --tx2:#8b949e; --brand:#7c5cff; --brand2:#9b80ff;
+    --up:#f85149; --down:#3fb950;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:20px 16px 60px}
+  .navbase{display:inline-flex;gap:4px;margin-bottom:16px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:10px;flex-wrap:wrap}
+  .navbase a{font-size:13px;font-weight:500;color:var(--tx2);text-decoration:none;padding:7px 18px;border-radius:8px;transition:all .15s;cursor:pointer;border:1px solid transparent}
+  .navbase a:hover{color:var(--tx);background:var(--surface2)}
+  .navbase a.on{background:var(--brand);border-color:var(--brand);color:#fff}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  header h1{font-size:20px;margin:0;font-weight:600}
+  header .sub{color:var(--tx2);font-size:12px}
+  .spacer{flex:1}
+  .btn{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:7px 16px;font-size:14px;cursor:pointer}
+  .btn:disabled{opacity:.5;cursor:default}
+  .meta{color:var(--tx2);font-size:12px;display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .meta b{color:var(--tx)}
+  .ctrl{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px}
+  .seg{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{background:transparent;color:var(--tx2);border:0;padding:8px 14px;font-size:13px;cursor:pointer}
+  .seg button.on{background:var(--brand);color:#fff}
+  .select{background:var(--surface);color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px}
+  .legend{color:var(--tx2);font-size:12px;margin-bottom:16px;line-height:1.7}
+  .grp{margin-bottom:22px}
+  .grp-hd{display:flex;align-items:baseline;gap:10px;margin:0 0 10px;font-size:15px;font-weight:600}
+  .grp-hd .cnt{color:var(--tx2);font-size:12px;font-weight:400}
+  .row{display:grid;grid-template-columns:32px minmax(0,1fr) 150px 150px auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px}
+  .rank{font-size:15px;font-weight:700;color:var(--brand2);text-align:center}
+  .nm{min-width:0}
+  .nm .t{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nm .tag{display:inline-block;font-size:11px;color:var(--tx2);border:1px solid var(--line);border-radius:6px;padding:0 6px;margin-top:3px}
+  .fx{color:var(--tx2);font-size:11px;display:flex;gap:6px;flex-wrap:wrap;margin-top:3px}
+  .fx span{white-space:nowrap}
+  .fx .pos{color:var(--up)} .fx .neg{color:var(--down)}
+  .qline{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:5px;font-size:11px}
+  .health{font-variant-numeric:tabular-nums;font-weight:600;border-radius:6px;padding:0 6px;line-height:18px}
+  .health.hg{color:#0f8b3f;background:rgba(63,185,80,.15)} .health.hg{border:1px solid rgba(63,185,80,.5)}
+  .health.hy{color:#b7790a;background:rgba(239,170,23,.14)} .health.hy{border:1px solid rgba(239,170,23,.5)}
+  .health.hr{color:#d1342c;background:rgba(248,81,73,.14)} .health.hr{border:1px solid rgba(248,81,73,.5)}
+  .badge{border-radius:6px;padding:0 6px;line-height:18px;font-weight:500;white-space:nowrap}
+  .bdanger{color:#ff8b84;border:1px solid rgba(248,81,73,.65);background:rgba(248,81,73,.14)}
+  .bwarn{color:#e3a13b;border:1px solid rgba(239,170,23,.55);background:rgba(239,170,23,.12)}
+  .qmeta{color:var(--tx2);white-space:nowrap}
+  .bars{display:flex;align-items:center;gap:8px}
+  @media (max-width:760px){
+    .row{grid-template-columns:28px minmax(0,1fr)}
+    .bars{grid-column:1/3;justify-self:start;margin-top:6px;padding-top:6px;border-top:1px dashed var(--line)}
+    .row>div[style*="grid-column"]{display:none}
+  }
+  .score{font-size:16px;font-weight:700;min-width:52px;text-align:right}
+  .bar{width:70px;height:6px;background:var(--surface2);border-radius:3px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--brand);border-radius:3px}
+  .empty{color:var(--tx2);font-size:13px;padding:20px 0}
+  .foot{color:var(--tx2);font-size:12px;line-height:1.7;border-top:1px solid var(--line);padding-top:14px;margin-top:8px}
+  .foot b{color:var(--tx)}
+  table.w{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+  table.w th,table.w td{text-align:left;padding:3px 6px;color:var(--tx2)}
+  table.w th:first-child{color:var(--tx)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="navbase">
+    <a href="market.html">大盘资金</a>
+    <a href="index.html">基金估值</a>
+    <a href="fund-screener.html" class="on">基金筛选</a>
+  </div>
+
+  <header>
+    <h1>基金筛选 · 近期涨势</h1>
+    <span class="sub">动量/趋势/波动/回撤 综合评分 · 按品类加权（静态快照版）</span>
+    <span class="spacer"></span>
+    <span class="btn" style="background:var(--surface2);color:var(--tx2);pointer-events:none" id="refreshBtn">快照数据</span>
+  </header>
+
+  <div class="meta">
+    <span>数据时间 <b id="gen">--</b></span>
+    <span>覆盖基金 <b id="fc">--</b></span>
+    <span>硬过滤 <b id="hx">--</b></span>
+    <span>加载耗时 <b id="cost">--</b></span>
+  </div>
+  <div class="empty" id="loading">正在拉取最新净值并计算因子 + 质地/消息面…（ETF 来自腾讯、开放式基金来自东财，首次较慢）</div>
+
+  <div class="ctrl">
+    <div class="seg" id="scopeSeg">
+      <button data-scope="all" class="on">全部</button>
+      <button data-scope="idx">指数类</button>
+      <button data-scope="act">主动股票</button>
+      <button data-scope="mix">混合/债券</button>
+    </div>
+    <select class="select" id="topN">
+      <option value="5">每类取 Top 5</option>
+      <option value="8" selected>每类取 Top 8</option>
+      <option value="10">每类取 Top 10</option>
+      <option value="20">每类取 Top 20</option>
+    </select>
+  </div>
+
+  <div id="result"></div>
+
+  <div class="legend" id="legend"></div>
+</div>
+
+<script>
+const SCOPE = {
+  idx: { label:'指数类', types:['etf','idx'], desc:'场内ETF + 场外指数/联接/增强' },
+  act: { label:'主动股票', types:['act'], desc:'主动股票基金 / 偏股混合' },
+  mix: { label:'混合/债券', types:['mix'], desc:'偏债混合 / 债券基金' },
+};
+const W_DESC = {
+  idx:'动量30 / 趋势30 / 低波动20 / 低回撤20',
+  act:'动量25 / 趋势25 / 低波动25 / 低回撤25',
+  mix:'动量20 / 趋势20 / 低波动30 / 低回撤30',
+};
+let DATA = null; let scope = 'all'; let topN = 8;
+
+const $ = s => document.querySelector(s);
+
+function scoreColor(s){ return '#7c5cff'; }
+function healthCls(h){ return h===undefined||h===null ? '' : (h>=80?'hg':(h>=60?'hy':'hr')); }
+function qualLine(r){
+  const q = r.qual;
+  if (!q) return '<div class="qline"><span class="qmeta">质地资料获取中…</span></div>';
+  const health = (q.health===undefined||q.health===null) ? '—' : q.health;
+  const scale = (isFinite(q.scaleYI) && q.scaleYI>0) ? `${q.scaleYI>=100?q.scaleYI.toFixed(0):q.scaleYI.toFixed(1)}亿` : '规模?';
+  const mgr = q.managerAgeY ? `经理${q.managerAgeY}年` : '';
+  const est = q.estabDate ? q.estabDate.slice(0,4) : '';
+  const badges = (q.badges||[]).map(b=>`<span class="badge ${b==='清盘风险'?'bdanger':'bwarn'}">${b}</span>`).join('');
+  return `<div class="qline">
+    ${health==='—'?'':`<span class="health ${healthCls(q.health)}">质 ${health}</span>`}
+    ${badges}
+    <span class="qmeta">${scale}${est?' · '+est+' 成立':''}${mgr?' · '+mgr:''}</span>
+  </div>`;
+}
+
+function render(){
+  const result = $('#result');
+  if (!DATA){ result.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+  const ranked = DATA.ranked;
+  const maxScore = Math.max(...ranked.map(x=>x.score), 1);
+  const groups = scope === 'all'
+    ? ['idx','act','mix'].map(k=>{ const rows = ranked.filter(x=>SCOPE[k].types.includes(x.type)).slice(0, topN); return {k, rows}; })
+    : [{ k: scope, rows: ranked.filter(x=>SCOPE[scope].types.includes(x.type)).slice(0, topN) }];
+  result.innerHTML = groups.map(g=>{
+    const s = SCOPE[g.k];
+    const total = ranked.filter(x=>SCOPE[g.k].types.includes(x.type)).length;
+    return `<div class="grp">
+      <div class="grp-hd">${s.label} <span class="cnt">${s.desc} · ${g.rows.length}/${total} 只</span></div>
+      ${g.rows.length===0 ? '<div class="empty">该类暂无基金</div>' : g.rows.map((r,i)=>`
+        <div class="row">
+          <div class="rank">${i+1}</div>
+          <div class="nm">
+            <div class="t">${r.name}</div>
+            <div class="tag">${r.code}</div>
+            <div class="fx">
+              <span>20日 <b class="${r.mom20>=0?'pos':'neg'}">${r.mom20>=0?'+':''}${r.mom20}%</b></span>
+              <span>60日 <b class="${r.mom60>=0?'pos':'neg'}">${r.mom60>=0?'+':''}${r.mom60}%</b></span>
+              <span>波动 <b>${r.vol}%</b></span>
+              <span>回撤 <b class="neg">${r.dd}%</b></span>
+            </div>
+            ${qualLine(r)}
+          </div>
+          <div style="grid-column:3/4"></div>
+          <div class="bars" style="grid-column:5/6">
+            <div class="bar"><i style="width:${Math.max(3, r.score/maxScore*100)}%"></i></div>
+            <div class="score">${r.score}</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  }).join('');
+
+  const lg = ['idx','act','mix'].map(k=>`<b>${SCOPE[k].label}</b>${W_DESC[k]}`).join('<br>');
+  $('#legend').innerHTML = `评分 = 分数越高的基金在当前市场更被看好。因子为横截面标准化后按品类权重加权：<br>${lg}<br>`+
+    `质地/消息面（不进评分，仅风控）：<b>质 {0-100}</b>=健康分（规模/成立年限/经理年限/费率）；<b>徽标</b>=负面风险提示（清盘、迷你、次新、高费率、经理经验不足）。硬过滤会剔除濒临清盘或成立过短的基金。<br>`+
+    `说明：动量/趋势反映近期涨势，低波动/低回撤控制回撤风险；「涨势好」不等于未来必涨，仅供择基参考。`;
+}
+
+async function load(){
+  const loading = $('#loading'); loading.style.display='';
+  $('#result').innerHTML='';
+  const t = performance.now();
+  try {
+    const r = await fetch('screener_snapshot.json?ts='+Date.now());
+    DATA = await r.json();
+    $('#gen').textContent = DATA.generated || '--';
+    $('#fc').textContent = (DATA.FCOUNT||0)+' 只';
+    $('#hx').textContent = (DATA.hardExcluded||0)+' 只';
+    $('#cost').textContent = ((performance.now()-t)/1000).toFixed(1)+' s';
+    loading.style.display='none';
+    render();
+  } catch(e){
+    loading.textContent = '加载失败：'+e.message;
+  }
+}
+
+// 类型切换
+$('#scopeSeg').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  scope = b.dataset.scope;
+  document.querySelectorAll('#scopeSeg button').forEach(x=>x.classList.toggle('on', x===b));
+  render();
+});
+$('#topN').addEventListener('change', e=>{ topN = +e.target.value; render(); });
+$('#refreshBtn').addEventListener('click', load);
+
+load();
+</script>
+</body>
+</html>
