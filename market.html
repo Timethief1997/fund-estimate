@@ -16,7 +16,7 @@
   </div>
 
   <header class="top">
-    <h1><span class="dot"></span>大盘资金流向 <span class="subtitle">market-capital-flow · 静态快照版</span></h1>
+    <h1><span class="dot"></span>大盘资金流向 <span class="subtitle">market-capital-flow · 指数/板块实时 + 资金榜快照</span></h1>
     <div class="top-r"><span>数据时间 <b id="dataTime">--</b></span></div>
   </header>
 
@@ -29,12 +29,12 @@
   </div>
 
   <div class="card">
-    <div class="card-hd">资金流向 · 主力净额排行 <span class="subtitle">数据源：新浪（快照）</span></div>
+    <div class="card-hd">资金流向 · 主力净额排行 <span class="subtitle" id="ffSub">数据源：新浪（快照）</span></div>
     <div class="card-bd">
-      <div class="ff-stats" id="ffStats"></div>
+      <div class="ff-stats" id="ffStats">加载中…</div>
       <div class="ff-grid">
-        <div class="subcard"><h4>主力净流入 TOP</h4><div class="ff-list" id="ffIn"></div></div>
-        <div class="subcard"><h4>主力净流出 TOP</h4><div class="ff-list" id="ffOut"></div></div>
+        <div class="subcard"><h4>主力净流入 TOP</h4><div class="ff-list" id="ffIn">--</div></div>
+        <div class="subcard"><h4>主力净流出 TOP</h4><div class="ff-list" id="ffOut">--</div></div>
       </div>
     </div>
   </div>
@@ -45,31 +45,80 @@
   </div>
 
   <div class="card">
-    <div class="card-hd">板块资金活跃 · 行业ETF <span class="subtitle">数据源：腾讯行情（快照）</span></div>
+    <div class="card-hd">板块资金活跃 · 行业ETF <span class="subtitle" id="sectorSub">数据源：腾讯行情</span></div>
     <div class="card-bd"><div class="sector-flow" id="sectorFlow">加载中…</div></div>
   </div>
 
-  <div class="toast" id="toast"></div>
 </div>
 
 <script>
+// ============ 通用工具 ============
 const fmt = n => isFinite(n) ? n.toFixed(2) : '--';
 const sign = n => (n>0?'+':'') + fmt(n) + '%';
 const cls = n => n>0?'up':(n<0?'down':'flat');
 const $ = id => document.getElementById(id);
 const fmtsym = s => String(s||'').replace(/^(sh|sz)/,'').toUpperCase();
 const SECTOR_NAMES = { 'sh510300':'沪深300','sh510050':'上证50','sz159915':'创业板','sh588000':'科创50','sh512480':'半导体','sz159995':'芯片','sh512760':'军工','sh515000':'科技','sh512170':'医疗','sh512690':'酒','sz159806':'新能源车','sh512880':'证券','sh518880':'黄金' };
+const errShow = msg => { const e=$('errmsg'); if(e){ e.textContent=msg; e.classList.remove('hidden'); } };
 
-function renderIndices(f){
-  (f.idx||[]).forEach(x=>{
-    const el=$('m'+(x.symbol||'').replace(/^(sh|sz)/,''));
-    if(el){ el.parentElement.className='idx '+cls(x.pct); el.innerHTML=(x.pct>0?'+':'')+fmt(x.pct)+'%'; const sub=el.nextElementSibling; if(sub) sub.textContent=x.price+' · '+x.name; }
+// localStorage 缓存（与估值页一致）
+const LS={
+  get(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+function cacheQuotes2(k,v){ try{ LS.set(k,v); }catch(_){} }
+
+// ============ 腾讯实时行情（script 注入，绕过静态页跨域） ============
+// qt.gtimg.cn/q=code... 返回 v_code="..."; 赋值语句，注入执行后读 window['v_'+code]
+function txLoad(codes){
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    let done=false;
+    const TO=setTimeout(()=>{ if(!done){ done=true; s.remove(); reject(new Error('腾讯行情超时')); } }, 12000);
+    s.onload=()=>{
+      if(done) return; done=true; clearTimeout(TO); s.remove();
+      const hits={};
+      codes.forEach(c=>{
+        const raw=window['v_'+c];
+        if(typeof raw==='string' && raw.length){ const f=raw.split('~'); hits[c]=f; }
+      });
+      resolve(hits);
+    };
+    s.onerror=()=>{ if(!done){ done=true; clearTimeout(TO); s.remove(); reject(new Error('腾讯行情加载失败')); } };
+    s.src='https://qt.gtimg.cn/q='+codes.join(',');
+    document.head.appendChild(s);
   });
 }
+// 腾讯格式：f[1]名称 f[3]现价 f[4]昨收 f[5]今开
+function txPct(f){ const now=parseFloat(f[3]), prev=parseFloat(f[4]); return (isFinite(now)&&isFinite(prev)&&prev>0) ? Math.round((now-prev)/prev*10000)/100 : null; }
+function txPrice(f){ const now=parseFloat(f[3]); return isFinite(now)?now.toFixed(2):'-'; }
+
+// ============ 指数：实时优先 ============
+const IDX_CODES=['sh000001','sz399001','sz399006'];
+function renderIndexLive(f, sub){
+  const code=(f.symbol||'').replace(/^(sh|sz)/,'');
+  const el=$('m'+code); if(!el) return;
+  const n=f.pct;
+  el.parentElement.className='idx '+cls(n);
+  el.className='v '+cls(n);
+  el.textContent = n===null?'--':sign(n);
+  const x=el.nextElementSibling; if(x) x.innerHTML = (f.price||'--')+(sub?' · <i style="color:var(--accent)">'+sub+'</i>':'');
+}
+function applyLiveIndices(hits){
+  IDX_CODES.forEach(c=>{
+    const f=hits[c]; if(!f) return;
+    renderIndexLive({ symbol:c, price:txPrice(f), pct:txPct(f) }, '实时');
+  });
+}
+function fetchLiveIndices(){
+  txLoad(IDX_CODES).then(applyLiveIndices).catch(()=>{});
+}
+
+// ============ 资金流向榜：快照（浏览器端已达上限） ============
 function ffYf(n){ const v=n/1e8; return (v>0?'+':'')+fmt(v)+'亿'; }
 function renderFFList(id, rows){
   const el=$(id);
-  el.innerHTML = (rows&&rows.length) ? rows.map((r,i)=>{
+  el.innerHTML = (rows&&rows.length) ? rows.slice(0,10).map((r,i)=>{
     const nm=r.netAmount, pos=nm>=0;
     const max=Math.max(...rows.map(x=>Math.abs(x.netAmount)),1);
     const width=Math.max(4, Math.abs(nm)/max*100);
@@ -83,36 +132,69 @@ function renderFFList(id, rows){
     </div>`;
   }).join('') : '<div class="hint">暂无数据</div>';
 }
-function loadStatic(){
-  const t=performance.now();
-  fetch('flow_snapshot.json?ts='+Date.now()).then(r=>r.json()).then(f=>{
-    $('dataTime').textContent = f.generated || '--';
-    renderIndices(f);
-    const inRows=f.ffIn||[], outRows=f.ffOut||[];
-    const allNet=inRows.concat(outRows).reduce((s,r)=>s+r.netAmount,0);
-    const topIn=inRows[0], topOut=outRows[0];
-    $('ffStats').innerHTML = `<div class="ff-stat"><span class="k">榜首流入</span><b class="up">${topIn?ffYf(topIn.netAmount):'--'}<i>${topIn?topIn.name:''}</i></b></div>`
-      + `<div class="ff-stat"><span class="k">榜首流出</span><b class="down">${topOut?ffYf(topOut.netAmount):'--'}<i>${topOut?topOut.name:''}</i></b></div>`
-      + `<div class="ff-stat"><span class="k">两榜合计净额</span><b class="${cls(allNet)}">${ffYf(allNet)}</b></div>`;
-    renderFFList('ffIn', inRows); renderFFList('ffOut', outRows);
-
-    const m=f.mkt||{}; const yi=v=>(Math.abs(v)/1e8).toFixed(2);
-    const stat=(k,v,c,sub)=>`<div class="ff-stat"><span class="k">${k}</span><b class="${c}">${v}${sub?`<i>${sub}</i>`:''}</b></div>`;
-    $('marketFlow').innerHTML = `<div class="ff-stats">${stat('主力净流入(总额)','+'+yi(m.netInSum),'up',(m.cntIn||0)+' 只')}${stat('主力净流出(总额)','-'+yi(m.netOutSum),'down',(m.cntOut||0)+' 只')}${stat('市场净额(合计)',(m.netSum>=0?'+':'')+yi(m.netSum),cls(m.netSum),'沪深个股榜聚合')}${stat('超大单净额',(m.r0Sum>=0?'+':'')+yi(m.r0Sum),cls(m.r0Sum),'超大单口径')}</div>`;
-    const top=(arr,pos)=> (arr&&arr.length)? arr.map((t,i)=>`<div class="ff-row"><div class="ff-rank ${pos?'up':'down'}">${String(i+1).padStart(2,'0')}</div><div class="ff-name">${t.name}<span class="code">${fmtsym(t.symbol)}</span></div><div class="ff-net ${cls(t.netAmount)}">${(Math.abs(t.netAmount)/1e8).toFixed(2)}亿</div><div class="ff-track"><div class="ff-bar ${pos?'up':'down'}" style="width:${Math.max(4,Math.min(100,Math.abs(t.netAmount)/Math.max(Math.abs((m.topIn||[])[0]?.netAmount||0),Math.abs((m.topOut||[])[0]?.netAmount||0),1)*100))}%"></div></div></div>`).join('') : '<div class="hint">暂无</div>';
-    $('marketFlow').innerHTML += `<div class="ff-grid"><div class="subcard"><h4>主力净流入 TOP10</h4><div class="ff-list">${top(m.topIn,true)}</div></div><div class="subcard"><h4>主力净流出 TOP10</h4><div class="ff-list">${top(m.topOut,false)}</div></div></div><div class="formula" style="margin-bottom:0">${m.note||''}</div>`;
-
-    const rows=(f.sector||[]);
-    if(!rows.length){ $('sectorFlow').innerHTML='<div class="hint">暂无数据</div>'; }
-    else{ const up=rows.filter(r=>r.pct>0).length; const sum=rows.reduce((s,r)=>s+(r.amount||0),0);
-      $('sectorFlow').innerHTML=`<div class="flow-summary">上涨 ${up} · 下跌 ${rows.length-up} · 合计成交 ${sum?(sum/1e4).toFixed(1)+'亿':'--'}</div>`
-        + rows.map(r=>{ const amt=isFinite(r.amount)&&r.amount>0?(r.amount/1e4).toFixed(2)+'亿':'--';
-          return `<div class="flow-card"><h5>${SECTOR_NAMES[r.symbol]||r.name}</h5><div class="val ${cls(r.pct)}">${sign(r.pct)}</div><div class="sub">${r.price} · 成交 ${amt}</div></div>`; }).join('');
-    }
-    console.log('loaded in '+(performance.now()-t).toFixed(0)+'ms');
-  }).catch(e=>{ $('errmsg').textContent='快照加载失败：'+e.message; $('errmsg').classList.remove('hidden'); console.error(e); });
+function renderFundFlowSnapshot(f){
+  const inRows=f.ffIn||[], outRows=f.ffOut||[];
+  const allNet=inRows.concat(outRows).reduce((s,r)=>s+r.netAmount,0);
+  const topIn=inRows[0], topOut=outRows[0];
+  $('ffStats').innerHTML=`<div class="ff-stat"><span class="k">榜首流入</span><b class="up">${topIn?ffYf(topIn.netAmount):'--'}<i>${topIn?topIn.name:''}</i></b></div>`
+    + `<div class="ff-stat"><span class="k">榜首流出</span><b class="down">${topOut?ffYf(topOut.netAmount):'--'}<i>${topOut?topOut.name:''}</i></b></div>`
+    + `<div class="ff-stat"><span class="k">两榜合计净额</span><b class="${cls(allNet)}">${ffYf(allNet)}</b></div>`;
+  $('ffSub').textContent = '数据源：新浪（快照'+(f.generated?' · '+f.generated:'')+'）';
+  renderFFList('ffIn', inRows); renderFFList('ffOut', outRows);
 }
-loadStatic();
+function renderMarketFlowSnapshot(f){
+  const m=f.mkt||{}; const yi=v=>(Math.abs(v)/1e8).toFixed(2);
+  const stat=(k,v,c,sub)=>`<div class="ff-stat"><span class="k">${k}</span><b class="${c}">${v}${sub?`<i>${sub}</i>`:''}</b></div>`;
+  $('marketFlow').innerHTML=`<div class="ff-stats">${stat('主力净流入(总额)','+'+yi(m.netInSum),'up',(m.cntIn||0)+' 只')}${stat('主力净流出(总额)','-'+yi(m.netOutSum),'down',(m.cntOut||0)+' 只')}${stat('市场净额(合计)',(m.netSum>=0?'+':'')+yi(m.netSum),cls(m.netSum),'沪深个股榜聚合')}${stat('超大单净额',(m.r0Sum>=0?'+':'')+yi(m.r0Sum),cls(m.r0Sum),'超大单口径')}</div>`;
+  const top=(arr,pos)=> (arr&&arr.length)? arr.map((t,i)=>`<div class="ff-row"><div class="ff-rank ${pos?'up':'down'}">${String(i+1).padStart(2,'0')}</div><div class="ff-name">${t.name}<span class="code">${fmtsym(t.symbol)}</span></div><div class="ff-net ${cls(t.netAmount)}">${(Math.abs(t.netAmount)/1e8).toFixed(2)}亿</div><div class="ff-track"><div class="ff-bar ${pos?'up':'down'}" style="width:${Math.max(4,Math.min(100,Math.abs(t.netAmount)/Math.max(Math.abs((m.topIn||[])[0]?.netAmount||0),Math.abs((m.topOut||[])[0]?.netAmount||0),1)*100))}%"></div></div></div>`).join('') : '<div class="hint">暂无</div>';
+  $('marketFlow').innerHTML+=`<div class="ff-grid"><div class="subcard"><h4>主力净流入 TOP10</h4><div class="ff-list">${top(m.topIn,true)}</div></div><div class="subcard"><h4>主力净流出 TOP10</h4><div class="ff-list">${top(m.topOut,false)}</div></div></div><div class="formula" style="margin-bottom:0">${m.note||''}</div>`;
+}
+
+// ============ 板块资金活跃 · 行业ETF：实时优先 ============
+const SECTOR_ETFS = ['sh510300','sh510050','sz159915','sh588000','sh512480','sz159995','sh512760','sh515000','sh512170','sh512690','sz159806','sh512880','sh518880'];
+function renderSectorLive(hits){
+  const rows=SECTOR_ETFS
+    .map(c=>{ const f=hits[c]; if(!f) return null; return { symbol:c, name:SECTOR_NAMES[c]||('ETF'+fmtsym(c)), pct:txPct(f), price:txPrice(f) }; })
+    .filter(Boolean);
+  if(!rows.length) return false;
+  const up=rows.filter(r=>r.pct>0).length;
+  $('sectorSub').textContent = '数据源：腾讯行情（实时）';
+  $('sectorFlow').innerHTML=`<div class="flow-summary">上涨 ${up} · 下跌 ${rows.length-up} · 现价口径</div>`
+    + rows.map(r=>`<div class="flow-card"><h5>${r.name}</h5><div class="val ${cls(r.pct)}">${r.pct===null?'--':sign(r.pct)}</div><div class="sub">${r.price}</div></div>`).join('');
+  return true;
+}
+function renderSectorSnapshot(f){
+  const rows=(f.sector||[]);
+  if(!rows.length){ $('sectorFlow').innerHTML='<div class="hint">暂无数据</div>'; return; }
+  const up=rows.filter(r=>r.pct>0).length; const sum=rows.reduce((s,r)=>s+(r.amount||0),0);
+  $('sectorSub').textContent = '数据源：腾讯行情（快照'+(f.generated?' · '+f.generated:'')+'）';
+  $('sectorFlow').innerHTML=`<div class="flow-summary">上涨 ${up} · 下跌 ${rows.length-up} · 合计成交 ${sum?(sum/1e4).toFixed(1)+'亿':'--'}</div>`
+    + rows.map(r=>{ const amt=isFinite(r.amount)&&r.amount>0?(r.amount/1e4).toFixed(2)+'亿':'--';
+      return `<div class="flow-card"><h5>${SECTOR_NAMES[r.symbol]||r.name}</h5><div class="val ${cls(r.pct)}">${sign(r.pct)}</div><div class="sub">${r.price} · 成交 ${amt}</div></div>`; }).join('');
+}
+function fetchLiveSector(){
+  txLoad(SECTOR_ETFS).then(hits=>{ if(!renderSectorLive(hits)) renderSectorSnapshot(null); }).catch(()=>{});
+}
+
+// ============ 快照加载：资金榜/大盘流必须快照；指数/板块先填快照再由实时覆盖 ============
+function loadSnapshot(){
+  const t=performance.now();
+  fetch('flow_snapshot.json?ts='+Date.now())
+    .then(r=>r.json())
+    .then(f=>{
+      if($('dataTime')) $('dataTime').textContent = f.generated || '--';
+      // 先渲染所有快照内容（实时成功后会覆盖指数/板块）
+      (f.idx||[]).forEach(x=>renderIndexLive(x));
+      renderFundFlowSnapshot(f);
+      renderMarketFlowSnapshot(f);
+      renderSectorSnapshot(f);
+      console.log('快照渲染完成 '+(performance.now()-t).toFixed(0)+'ms');
+    })
+    .catch(e=>{ errShow('快照加载失败：'+e.message); console.error(e); })
+    .finally(()=>{ fetchLiveIndices(); fetchLiveSector(); });
+}
+
+loadSnapshot();
 </script>
 </body>
 </html>
