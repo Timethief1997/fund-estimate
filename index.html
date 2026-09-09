@@ -123,6 +123,9 @@ select.inp{min-width:120px}
 .nav-day-row .d-est .tag{display:inline-block;font-size:9px;font-weight:600;padding:0 3px;border-radius:2px;margin-left:3px;vertical-align:1px}
 .nav-day-row .tag-recalc{color:#b45309;background:rgba(245,158,11,.15)}
 .nav-day-row .tag-snap{color:var(--down);background:rgba(34,197,94,.15)}
+.nav-day-row .cal-line{display:block;font-size:11px;font-weight:600;margin-top:1px;font-variant-numeric:tabular-nums}
+.nav-day-row .d-est .cal-line{color:var(--accent)}
+.nav-day-row .d-bias .cal-line{font-weight:600}
 .sector-flow{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .flow-summary{font-size:11px;color:var(--tx2);margin-bottom:8px}
 .flow-card{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:10px}
@@ -513,6 +516,9 @@ const DEFAULT_FUNDS_DATA = [
   {
     code:'024473', name:'信澳优势A', manager:'吴清宇', type:'主动股混',
     method:'直接加权', report:'2026Q2', coverage:81.32,
+    // 逐基金校准（样本外验证真改善才启用）：校准估值 = alpha + beta×原估值。
+    // 仅 024473 启用；其他基金误差源于代理错配，校准反而过拟合，保持原方法。
+    calib:{ alpha:0.08, beta:1.067 },
     formula:'估值 = Σ(占净值比×个股实时涨跌幅)  覆盖率 81.32%',
     holdings:[
       ['sz301086','鸿富瀚',9.68],['sz002980','华盛昌',9.57],['sz301128','强瑞技术',9.57],
@@ -614,6 +620,11 @@ function computeFund(f, q){
     }
     est.breakdown = { rows };
   }
+  // 逐基金校准（新方法）：保留原 headline 为主记录，额外输出校准估值用于对比监测
+  if(f.calib && est.headline!==null && isFinite(est.headline)){
+    const calVal = f.calib.alpha + f.calib.beta*est.headline;
+    est.headlineCal = Math.round(calVal*100)/100;
+  }
   return est;
 }
 
@@ -678,10 +689,12 @@ function render(){
     const p=est.headline;
     const dir = p===null?'—':(p>0?'▲':'▼');
     const c=credScore(f, est);
+    const calHtml = (est.headlineCal!==null && est.headlineCal!==undefined)
+      ? `<div style="font-size:11px;color:var(--accent);margin-top:2px">校准 ${sign(est.headlineCal)}</div>` : '';
     return `<tr>
       <td class="td-name"><b>${f.code}</b> ${f.name}<div class="meta"><span class="tag">${f.report||'—'}</span><span class="tag">${f.type}</span></div></td>
       <td class="method">${f.method}</td>
-      <td><span class="est-pill ${cls(p)}">${p===null?'--':sign(p)}</span></td>
+      <td><span class="est-pill ${cls(p)}">${p===null?'--':sign(p)}</span>${calHtml}</td>
       <td><div class="cred-wrap"><div class="cred-score ${c.color==='good'?'ok':(c.color==='mid'?'warn':'bad')}">${c.score}</div><div class="cred-bar"><i class="${c.color}" style="width:${c.score}%"></i></div><div class="cred-label">置信 ${c.level}</div></div></td>
       <td class="dir ${cls(p)}">${dir}</td>
       <td style="color:var(--tx2);font-size:11px">${c.reasons.slice(0,2).join(' · ')}</td>
@@ -716,6 +729,8 @@ function render(){
     if(est.etfLine) br = `<div class="subcard"><h4>底层 ETF 行情</h4><div class="f-row"><span class="nm">${f.etfName}</span><span class="pct">${est.etfLine}</span></div></div>`;
 
     const cols = (est.cols||[]).map(c=>`<div class="f-row"><span class="nm">${c.label}</span><span class="pct ${cls(c.val)}">${c.val===null||c.val===undefined?'--':sign(c.val)}</span></div>`).join('');
+    const calCol = (est.headlineCal!==null && est.headlineCal!==undefined)
+      ? `<div class="f-row"><span class="nm">校准估值（新方法）</span><span class="pct ${cls(est.headlineCal)}">${sign(est.headlineCal)}</span></div>` : '';
 
     return `<div class="detail-head open" data-i="${i}">
       <h3>${f.code} ${f.name} <span class="tag">${f.report||'—'}</span><span class="tag">${f.method}</span></h3>
@@ -726,7 +741,7 @@ function render(){
     </div>
     <div class="detail-body open" id="db${i}">
       <div class="formula" style="margin-bottom:10px">${f.formula}</div>
-      <div class="subcard" style="margin-bottom:12px"><h4>估值结果</h4>${cols}</div>
+      <div class="subcard" style="margin-bottom:12px"><h4>估值结果</h4>${cols}${calCol}</div>
       ${br}
       ${sixHtml}
     </div>`;
@@ -1231,14 +1246,25 @@ function renderHistory(){
       const estCell = estShow===null
         ? `<i class="miss" title="${missReason}（该日暂未回算出估值）">${missReason}</i>`
         : sign(estShow)+estTag;
+      // 逐基金校准（新方法）对比列：对启用校准的基金，基于同一原估值派生校准值
+      let calEst = null;
+      if(f.calib && estShow!==null && isFinite(estShow)){
+        calEst = Math.round((f.calib.alpha + f.calib.beta*estShow)*100)/100;
+      }
       const bias = (estShow!==null && actual!==null) ? (actual - estShow) : null;
       const biasCls = bias===null ? '' : cls(bias);
+      let calBias = null;
+      if(calEst!==null && actual!==null) calBias = actual - calEst;
       const hasRec = fb && isFinite(fb.actualPct);
+      const estNav = estShow===null?'empty':cls(estShow);
+      const biasCell = bias===null
+        ? '--'
+        : (bias>0?'+':'')+fmt(bias) + (calBias!==null ? `<span class="cal-line ${cls(calBias)}">${calBias>0?'+':''}${fmt(calBias)}</span>` : '');
       return `<div class="nav-day-row" data-code="${f.code}" data-date="${date}" data-src="${src}">
         <span class="d-date">${date}</span>
-        <span class="d-est ${estShow===null?'empty':cls(estShow)}">${estCell}</span>
+        <span class="d-est ${estNav}">${estCell}${calEst!==null?`<span class="cal-line">校准 ${sign(calEst)}</span>`:''}</span>
         <span class="d-actual"><input class="inp" type="text" inputmode="decimal" value="${actual===null?'':actual}" placeholder="可手填"></span>
-        <span class="d-bias ${biasCls}">${bias===null?'--':(bias>0?'+':'')+fmt(bias)}</span>
+        <span class="d-bias ${biasCls}">${biasCell}</span>
         <span class="d-save"><button class="btn-mini${hasRec?' saved':''}" ${hasRec?'disabled':''} data-code="${f.code}" data-date="${date}">${hasRec?'已记录':'记录'}</button></span>
       </div>`;
     }).join('');
@@ -1435,7 +1461,24 @@ function renderOpt(){
     if(mean>=0.4) sug='平均偏差明显为正（估值偏低）→ 建议上调估值口径';
     else if(mean<=-0.4) sug='平均偏差明显为负（估值偏高）→ 建议下调估值口径';
     else sug='平均偏差接近零，方法总体稳健';
-    return `<div class="nav-stat"><span class="k">${last.name} <i>${code} · ${n} 条 · 最近 ${last.date}</i></span><b>MAE ${mae}pp · 平均偏差 ${mean>0?'+':''}${mean}pp</b><i>${sug}</i></div>`;
+    // 逐基金校准（新方法）对比：同一批实际净值，对比原方法与校准方法的 MAE / 均偏
+    let calLine='';
+    const f=FUNDS.find(x=>x.code===code);
+    if(f && f.calib){
+      let csum=0, casum=0, cnt=0;
+      arr.slice(-30).forEach(r=>{
+        const ce = f.calib.alpha + f.calib.beta*r.estimatePct;
+        const cb = r.actualPct - ce;
+        if(isFinite(cb)){ csum+=cb; casum+=Math.abs(cb); cnt++; }
+      });
+      if(cnt>0){
+        const cMae=Math.round(casum/cnt*100)/100;
+        const cMean=Math.round(csum/cnt*100)/100;
+        const better = cMae < mae ? '校准更优' : (cMae>mae ? '原方法更优' : '持平');
+        calLine=`<i>｜校准(新) MAE ${cMae}pp · 均偏${cMean>0?'+':''}${cMean}pp → ${better}</i>`;
+      }
+    }
+    return `<div class="nav-stat"><span class="k">${last.name} <i>${code} · ${n} 条 · 最近 ${last.date}</i></span><b>MAE ${mae}pp · 平均偏差 ${mean>0?'+':''}${mean}pp</b><i>${sug}</i>${calLine}</div>`;
   }).join('');
   el.innerHTML=html;
 }
