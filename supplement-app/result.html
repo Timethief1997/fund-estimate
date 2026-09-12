@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>营养推荐报告 · 拾养</title>
+  <link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body data-page="result">
+  <div class="app">
+
+    <header class="topbar">
+      <a class="tb-back" id="tbBack" href="quiz.html" aria-label="返回"><i class="icon ico-20" data-icon="chevron-left"></i></a>
+      <span class="tb-title">营养推荐报告</span>
+    </header>
+
+    <div class="page" id="pageRoot"></div>
+  </div>
+
+  <script src="mock.js?v=2"></script>
+  <script src="api.js?v=2"></script>
+  <script src="app.js?v=2"></script>
+  <script>
+    const root = document.getElementById('pageRoot');
+
+    function productHTML(p) {
+      return `
+      <div class="product-card">
+        <div class="product-top">
+          <span class="product-thumb"><i class="icon ico-20" data-icon="pill"></i></span>
+          <div style="min-width:0">
+            <div class="product-name">${App.esc(p.name)}</div>
+            <div class="product-brand">${App.esc(p.brand)} · ${App.esc(p.form)}</div>
+          </div>
+        </div>
+        <div class="product-meta">
+          <i class="icon ico-16" data-icon="star"></i>${p.rating} 分 · 已售 ${App.esc(p.sales)}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">
+          ${p.tags.map(t => `<span class="tag gray">${App.esc(t)}</span>`).join('')}
+        </div>
+        <div class="product-price"><span class="p">${App.fmtPrice(p.price)}</span><span class="u">/ 件</span></div>
+        <button class="product-buy" data-buy="${App.esc(p.name)}">加入补充清单</button>
+      </div>`;
+    }
+
+    function cardHTML(item, idx) {
+      return `
+      <article class="nutrient-card card rv" style="--d:${0.08 + idx * 0.07}s" data-id="${item.id}">
+        <div class="nc-head">
+          <span class="nc-prio">${item.rank}</span>
+          <div style="min-width:0;flex:1">
+            <div class="nc-title"><b>${App.esc(item.name)}</b><span class="nc-en">${App.esc(item.en)}</span></div>
+            <div class="nc-reasons">${item.reasons.map(r => `<span class="tag accent">${App.esc(r)}</span>`).join('')}<span class="tag gray">${App.esc(item.category)}</span></div>
+          </div>
+          <span class="nc-chev"><i class="icon ico-20" data-icon="chevron-down"></i></span>
+        </div>
+        <div class="nc-body">
+          <div class="nc-why"><b>为什么推荐给你：</b><br>${App.esc(item.why)}</div>
+          ${item.reportNotes && item.reportNotes.length ? `<div class="nc-report"><i class="icon ico-16" data-icon="file-text"></i><div><b>报告提示：</b>${item.reportNotes.map(n => App.esc(n)).join('；')}</div></div>` : ''}
+          ${item.tests && item.tests.length ? `<div class="nc-test"><i class="icon ico-16" data-icon="search"></i> 建议先查：${item.tests.map(t => `<span class="tag warn">${App.esc(t.name)}</span>`).join('')}</div>` : ''}
+          <div class="nc-dose"><i class="icon ico-18" data-icon="pill"></i> 建议用量：<b>${App.esc(item.dose)}</b></div>
+          <div class="nc-foods">
+            <div class="lbl"><i class="icon ico-16" data-icon="leaf"></i> 食物来源优先</div>
+            <div class="food-tags">${item.foods.map(f => `<span class="food"><i class="icon ico-16" data-icon="check"></i>${App.esc(f)}</span>`).join('')}</div>
+          </div>
+          ${item.recipes && item.recipes.length ? `
+          <div class="nc-recipes">
+            <div class="lbl"><i class="icon ico-16" data-icon="book-open"></i> 营养食谱 · 照着吃更实在</div>
+            <div class="recipe-scroll">
+              ${item.recipes.map(r => `
+              <a class="recipe-mini" href="recipe.html?id=${r.id}">
+                <div class="recipe-mini-top">
+                  <span class="recipe-mini-name">${App.esc(r.name)}</span>
+                  <span class="tag gray">${App.esc(r.meal)}</span>
+                </div>
+                <p class="recipe-mini-intro">${App.esc(r.intro)}</p>
+                <span class="recipe-mini-more">看做法 <i class="icon ico-16" data-icon="arrow-right"></i></span>
+              </a>`).join('')}
+            </div>
+          </div>` : ''}
+          <div class="nc-products">
+            <div class="lbl"><i class="icon ico-16" data-icon="shopping-bag"></i> 推荐补品（演示商品）</div>
+            <div class="product-row">${item.products.map(productHTML).join('')}</div>
+          </div>
+          <div class="nc-warn"><i class="icon ico-16" data-icon="alert-triangle"></i>
+            <div>${item.warnings.map(w => `<div>· ${App.esc(w)}</div>`).join('')}</div>
+          </div>
+        </div>
+      </article>`;
+    }
+
+    function render(data) {
+      const p = data.profile || {};
+      /* 报告流程的返回入口 */
+      const tbBack = document.getElementById('tbBack');
+      if (tbBack) tbBack.href = data.kind === 'report' ? 'report.html' : 'quiz.html';
+
+      const tags = [
+        DB.labelOf('gender', p.gender),
+        DB.labelOf('ageGroups', p.ageGroup),
+        ...(p.conditions || []).map(k => DB.labelOf('conditions', k)),
+        ...(p.events || []).map(k => DB.labelOf('events', k))
+      ].filter(Boolean);
+
+      /* 汇总检测建议：按指标去重，聚合关联营养方向 */
+      const testMap = {};
+      (data.items || []).forEach(item => {
+        (item.tests || []).forEach(t => {
+          if (!testMap[t.name]) testMap[t.name] = { name: t.name, note: t.note, sources: [] };
+          testMap[t.name].sources.push(item.name);
+        });
+      });
+      const testList = Object.values(testMap);
+      const testSection = testList.length ? `
+        <div class="section">
+          <div class="section-head">
+            <h2 class="section-title">建议先查这些指标</h2>
+            <span class="section-more">先检测 · 再补充</span>
+          </div>
+          <div class="tests-box card rv" style="--d:.42s">
+            <p class="tests-tip"><i class="icon ico-16" data-icon="info"></i> 检测结果仅供参考，具体请以医生解读为准。</p>
+            ${testList.map(t => `
+            <div class="test-item">
+              <span class="test-name"><b>${App.esc(t.name)}</b><span class="test-src">关联：${t.sources.map(s => App.esc(s)).join(' / ')}</span></span>
+              <span class="test-note">${App.esc(t.note)}</span>
+            </div>`).join('')}
+          </div>
+        </div>` : '';
+
+      root.innerHTML = `
+        <div class="summary-hero rv" style="margin-top:14px">
+          <h2>为你找到 ${data.items.length} 个<br>关键补充方向</h2>
+          <p>${App.esc(data.summary)}</p>
+          <div class="summary-meta">${tags.map(t => `<span class="tag">${App.esc(t)}</span>`).join('')}</div>
+        </div>
+
+        ${data.report && data.report.length ? `
+        <div class="report-banner rv" style="--d:.18s">
+          <i class="icon ico-18" data-icon="file-text"></i>
+          <div>
+            <b>本次推荐已结合你的检查报告</b>
+            <span>${data.report.map(r => `${App.esc(r.name)}${r.level === 'low' ? '偏低' : '偏高'}`).join('、')} — ${App.esc(data.report[0].text)}</span>
+          </div>
+        </div>` : ''}
+
+        <div class="section">
+          <div class="section-head">
+            <h2 class="section-title">优先补充清单</h2>
+            <span class="section-more">按匹配度排序 <i class="icon ico-16" data-icon="arrow-right"></i></span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px" id="cardsBox">
+            ${data.items.map((item, i) => cardHTML(item, i)).join('')}
+          </div>
+        </div>
+
+        ${testSection}
+
+        <div class="section">
+          <div class="caution-box rv" style="--d:.5s">
+            <h4><i class="icon ico-18" data-icon="shield-check"></i> 温馨提示</h4>
+            <ul>
+              ${data.cautions.map(c => `<li><i class="icon ico-16" data-icon="circle-check"></i><span>${App.esc(c)}</span></li>`).join('')}
+            </ul>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:12px;margin-top:24px">
+          <a class="btn btn-ghost" href="quiz.html"><i class="icon ico-18" data-icon="refresh-cw"></i> 重新测评</a>
+          <a class="btn btn-primary" href="index.html"><i class="icon ico-18" data-icon="home"></i> 返回首页</a>
+        </div>
+
+        <p class="disclaimer-line" style="margin-bottom:28px">数据来源：基于《中国居民膳食营养素参考摄入量（DRIs）》等公开营养指南与科普资料简化整理。本报告由演示原型自动生成，仅供学习参考，不构成医疗建议；如有健康问题请咨询医生。</p>`;
+
+      App.mountIcons(root);
+
+      /* 卡片展开/收起 */
+      root.querySelectorAll('.nutrient-card').forEach(card => {
+        card.querySelector('.nc-head').addEventListener('click', () => card.classList.toggle('open'));
+      });
+      const first = root.querySelector('.nutrient-card');
+      if (first) first.classList.add('open');
+
+      /* 补品「加入清单」 */
+      root.querySelectorAll('[data-buy]').forEach(btn => {
+        btn.addEventListener('click', () => App.toast('已加入补充清单（演示）'));
+      });
+    }
+
+    (async function load() {
+      const id = new URLSearchParams(location.search).get('r');
+      if (!id) { root.innerHTML = `<div class="empty" style="margin-top:120px">
+          <span class="empty-ico"><i class="icon ico-22" data-icon="clipboard-list"></i></span>
+          <p>还没有测评记录，先去生成一份推荐报告吧</p>
+          <a class="btn btn-primary" href="quiz.html">去测评</a>
+        </div>`;
+        App.mountIcons(root); return; }
+      const res = await API.getRecord(id);
+      if (!res.data) {
+        root.innerHTML = `<div class="empty" style="margin-top:120px">
+          <span class="empty-ico"><i class="icon ico-22" data-icon="info"></i></span>
+          <p>该记录不存在或已被清除</p>
+          <a class="btn btn-primary" href="quiz.html">重新测评</a></div>`;
+        App.mountIcons(root); return;
+      }
+      render(res.data);
+    })();
+  </script>
+</body>
+</html>

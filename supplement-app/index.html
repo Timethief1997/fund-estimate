@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>拾养 · 懂你的营养补给站</title>
+  <link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body data-page="home">
+  <div class="app tab-shell">
+
+    <div class="page">
+
+      <!-- 品牌行 -->
+      <div class="brand-row rv">
+        <span class="brand-badge"><i class="icon ico-22" data-icon="leaf"></i></span>
+        <div>
+          <div class="brand-name">拾养</div>
+          <div class="brand-sub">SHIYANG · 懂你的营养补给站</div>
+        </div>
+      </div>
+
+      <!-- Hero -->
+      <section class="hero rv" style="--d:.06s">
+        <img class="bg" src="assets/hero.jpg" alt="营养补品与天然食材">
+        <div class="veil"></div>
+        <div class="hero-body">
+          <div class="hero-kicker"><i class="icon ico-16" data-icon="sparkles"></i> 因人而异 · 按需补充</div>
+          <h1>把营养，<br>补在点子上</h1>
+          <p>根据你的性别、年龄、身体状况与近期经历，<br>帮你筛出真正值得补的营养素与补品。</p>
+          <a class="btn" href="quiz.html">开始智能测评 <i class="icon ico-18" data-icon="arrow-right"></i></a>
+        </div>
+      </section>
+
+      <!-- 检查报告入口 -->
+      <a class="report-entry rv" style="--d:.12s" href="report.html">
+        <span class="rep-entry-ico"><i class="icon ico-22" data-icon="file-text"></i></span>
+        <span class="rep-entry-body"><b>我有检查报告</b><span>录入检测结果，营养匹配更精准</span></span>
+        <i class="icon ico-18" data-icon="chevron-right"></i>
+      </a>
+
+      <!-- 快捷场景 -->
+      <section class="section rv" style="--d:.14s">
+        <div class="section-head">
+          <h2 class="section-title">按场景快速开始</h2>
+        </div>
+        <div class="scene-grid" id="sceneGrid"></div>
+      </section>
+
+      <!-- 今日贴士 -->
+      <section class="section rv" style="--d:.22s">
+        <div class="section-head">
+          <h2 class="section-title">今日营养贴士</h2>
+          <span class="section-more tip-refresh" id="tipRefresh"><i class="icon ico-16" data-icon="refresh-cw"></i> 换一条</span>
+        </div>
+        <div class="tip-card card" id="tipCard"></div>
+      </section>
+
+      <p class="disclaimer-line rv" style="--d:.3s">
+        本应用内容仅为营养知识科普演示，不构成医疗建议。<br>
+        如有疾病或特殊状况，请务必咨询专业医生或营养师。
+      </p>
+    </div>
+
+    <!-- 底部 Tab 栏（三页一致，勿改动） -->
+    <nav class="tabbar">
+      <a class="tab" data-tab="home" href="index.html"><span class="tab-ico"><i class="icon ico-20" data-icon="home"></i></span>首页</a>
+      <a class="tab" data-tab="quiz" href="quiz.html"><span class="tab-ico"><i class="icon ico-20" data-icon="clipboard-list"></i></span>测评</a>
+      <a class="tab" data-tab="profile" href="profile.html"><span class="tab-ico"><i class="icon ico-20" data-icon="user"></i></span>我的</a>
+    </nav>
+  </div>
+
+  <script src="mock.js?v=2"></script>
+  <script src="api.js?v=2"></script>
+  <script src="app.js?v=2"></script>
+  <script>
+    /* 渲染快捷场景 */
+    const grid = document.getElementById('sceneGrid');
+    grid.innerHTML = DB.scenes.map(s => `
+      <a class="scene-card" href="quiz.html?scene=${s.key}">
+        <span class="scene-ico"><i class="icon ico-20" data-icon="${s.icon}"></i></span>
+        <span class="scene-info"><b>${App.esc(s.label)}</b><span>${App.esc(s.desc)}</span></span>
+      </a>`).join('');
+    App.mountIcons(grid);
+
+    /* 今日贴士（轮换） */
+    let tipIdx = Math.floor(Math.random() * DB.tips.length);
+    const tipCard = document.getElementById('tipCard');
+    function renderTip() {
+      const t = DB.tips[tipIdx];
+      tipCard.innerHTML = `
+        <span class="tip-ico"><i class="icon ico-20" data-icon="lightbulb"></i></span>
+        <div style="flex:1;min-width:0">
+          <h3>${App.esc(t.title)}</h3>
+          <p>${App.esc(t.body)}</p>
+        </div>`;
+      App.mountIcons(tipCard);
+    }
+    renderTip();
+    document.getElementById('tipRefresh').addEventListener('click', () => {
+      tipIdx = (tipIdx + 1) % DB.tips.length;
+      renderTip();
+    });
+  </script>
+</body>
+</html>

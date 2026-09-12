@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>营养菜谱 · 拾养</title>
+  <link rel="stylesheet" href="styles.css?v=3">
+</head>
+<body data-page="recipe">
+  <div class="app">
+    <header class="topbar">
+      <a class="tb-back" id="tbBack" href="index.html" aria-label="返回"><i class="icon ico-20" data-icon="chevron-left"></i></a>
+      <span class="tb-title">营养菜谱</span>
+    </header>
+    <div class="page" id="pageRoot"></div>
+  </div>
+
+  <script src="mock.js?v=3"></script>
+  <script src="api.js?v=3"></script>
+  <script src="app.js?v=3"></script>
+  <script>
+    const root = document.getElementById('pageRoot');
+
+    /* 菜谱迷你卡：供「相关推荐」与结果页复用 */
+    function recipeMini(r) {
+      return `
+      <a class="recipe-mini" href="recipe.html?id=${r.id}">
+        <div class="recipe-mini-top">
+          <span class="recipe-mini-name">${App.esc(r.name)}</span>
+          <span class="tag gray">${App.esc(r.meal)}</span>
+        </div>
+        <p class="recipe-mini-intro">${App.esc(r.intro)}</p>
+        <span class="recipe-mini-more">看做法 <i class="icon ico-16" data-icon="arrow-right"></i></span>
+      </a>`;
+    }
+
+    (function load() {
+      const id = new URLSearchParams(location.search).get('id');
+      const r = DB.recipes.find(x => x.id === id);
+      if (!r) {
+        root.innerHTML = `<div class="empty" style="margin-top:120px">
+          <span class="empty-ico"><i class="icon ico-22" data-icon="book-open"></i></span>
+          <p>没找到这道菜谱，去别处逛逛吧</p>
+          <a class="btn btn-primary" href="index.html">返回首页</a>
+        </div>`;
+        App.mountIcons(root);
+        return;
+      }
+
+      /* 菜谱关联的营养方向 */
+      const nuts = r.nutrientIds.map(n => DB.nutrientById(n)).filter(Boolean);
+      /* 同营养方向的其他菜谱（换着吃） */
+      const related = DB.recipes
+        .filter(x => x.id !== r.id && x.nutrientIds.some(n => r.nutrientIds.includes(n)))
+        .slice(0, 5);
+
+      /* 从结果页进入时，返回去结果页 */
+      const back = document.getElementById('tbBack');
+      if (history.length > 1) back.href = 'javascript:history.back()';
+
+      root.innerHTML = `
+        <article class="recipe-hero rv" style="margin-top:14px">
+          <span class="tag" style="align-self:flex-start"><i class="icon ico-16" data-icon="clock"></i> 适合${App.esc(r.meal)}</span>
+          <h2>${App.esc(r.name)}</h2>
+          <p>${App.esc(r.intro)}</p>
+          <div class="recipe-nuts">
+            ${nuts.map(n => `<span class="tag">${App.esc(n.name)}</span>`).join('')}
+          </div>
+        </article>
+
+        <section class="section rv" style="--d:.1s">
+          <div class="section-head">
+            <h2 class="section-title">食材清单</h2>
+            <span class="section-more">${r.ingredients.length} 种 · 家常易购</span>
+          </div>
+          <div class="card recipe-ing">
+            ${r.ingredients.map(ig => `
+            <div class="ing-row">
+              <span class="ing-ico"><i class="icon ico-16" data-icon="check"></i></span>
+              ${App.esc(ig)}
+            </div>`).join('')}
+          </div>
+        </section>
+
+        <section class="section rv" style="--d:.18s">
+          <div class="section-head">
+            <h2 class="section-title">做法步骤</h2>
+            <span class="section-more">简单好上手</span>
+          </div>
+          <div class="card recipe-steps">
+            ${r.steps.map((s, i) => `
+            <div class="step-row">
+              <span class="step-no">${i + 1}</span>
+              <span class="step-txt">${App.esc(s)}</span>
+            </div>`).join('')}
+          </div>
+        </section>
+
+        ${related.length ? `
+        <section class="section rv" style="--d:.26s">
+          <div class="section-head">
+            <h2 class="section-title">同营养 · 换着吃</h2>
+            <span class="section-more">更多搭配</span>
+          </div>
+          <div class="recipe-scroll">
+            ${related.map(recipeMini).join('')}
+          </div>
+        </section>` : ''}
+
+        <div class="recipe-bottom rv" style="--d:.34s">
+          <a class="btn btn-primary" href="quiz.html"><i class="icon ico-18" data-icon="clipboard-list"></i> 生成我的营养报告</a>
+        </div>`;
+
+      App.mountIcons(root);
+    })();
+  </script>
+</body>
+</html>

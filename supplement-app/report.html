@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>录入检查报告 · 拾养</title>
+  <link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body data-page="report">
+  <div class="app">
+
+    <header class="topbar">
+      <a class="tb-back" href="index.html" aria-label="返回"><i class="icon ico-20" data-icon="chevron-left"></i></a>
+      <span class="tb-title">录入检查报告</span>
+    </header>
+
+    <div class="page">
+
+      <!-- 引导 -->
+      <div class="report-intro rv">
+        <span class="rep-ico"><i class="icon ico-24" data-icon="file-text"></i></span>
+        <div>
+          <h2>报告在手，匹配更准</h2>
+          <p>把你已有的检查结果录进来，我们按异常指标对营养素做针对性加权，推荐会更贴近你的真实状况。</p>
+        </div>
+      </div>
+
+      <!-- 基本信息 -->
+      <div class="section rv" style="--d:.08s">
+        <div class="section-head">
+          <h2 class="section-title">基本信息</h2>
+        </div>
+        <p class="step-sub">性别与年龄段是推荐的基础，必填。</p>
+
+        <div class="seg-row" style="margin-bottom:18px" id="genderSeg">
+          <div class="seg" data-key="female">
+            <span class="seg-ico"><i class="icon ico-22" data-icon="heart"></i></span>
+            <span>女性</span>
+          </div>
+          <div class="seg" data-key="male">
+            <span class="seg-ico"><i class="icon ico-22" data-icon="activity"></i></span>
+            <span>男性</span>
+          </div>
+        </div>
+
+        <div class="chip-group" id="ageChips"></div>
+      </div>
+
+      <!-- 指标录入 -->
+      <div class="section rv" style="--d:.16s">
+        <div class="section-head">
+          <h2 class="section-title">检测指标</h2>
+          <span class="section-more">不知道数值选「正常」即可</span>
+        </div>
+        <p class="step-sub">找到报告里对应的指标，选择它处于什么范围；没有查过的项保持「正常」。</p>
+        <div class="rep-list" id="testsBox"></div>
+        <p class="step-optional"><i class="icon ico-16" data-icon="info"></i> 参考区间为通用近似值，请以你报告单上的参考范围为准。</p>
+      </div>
+
+      <!-- 提交 -->
+      <button class="btn btn-primary" id="btnSubmit" style="margin-top:26px">
+        <i class="icon ico-18" data-icon="sparkles"></i> 生成营养推荐
+      </button>
+
+      <p class="disclaimer-line">本录入结果仅用于生成营养知识参考，不构成医疗诊断或建议。</p>
+    </div>
+  </div>
+
+  <script src="mock.js?v=2"></script>
+  <script src="api.js?v=2"></script>
+  <script src="app.js?v=2"></script>
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const state = { gender: null, ageGroup: null };
+
+    /* 性别 */
+    $('#genderSeg').querySelectorAll('.seg').forEach(el => {
+      el.addEventListener('click', () => {
+        $('#genderSeg').querySelectorAll('.seg').forEach(x => x.classList.remove('selected'));
+        el.classList.add('selected');
+        state.gender = el.dataset.key;
+      });
+    });
+
+    /* 年龄段 */
+    $('#ageChips').innerHTML = DB.ageGroups.map(a =>
+      `<span class="chip" data-key="${a.key}">${App.esc(a.label)}</span>`).join('');
+    $('#ageChips').querySelectorAll('.chip').forEach(el => {
+      el.addEventListener('click', () => {
+        $('#ageChips').querySelectorAll('.chip').forEach(x => x.classList.remove('selected'));
+        el.classList.add('selected');
+        state.ageGroup = el.dataset.key;
+      });
+    });
+    App.mountIcons(document);
+
+    /* 指标列表 */
+    const testsBox = $('#testsBox');
+    testsBox.innerHTML = DB.testsPool.map(t => `
+      <div class="rep-item card" data-key="${t.key}">
+        <div class="rep-head">
+          <span class="rep-name">${App.esc(t.name)}</span>
+          <span class="rep-ref">${App.esc(t.ref)}</span>
+        </div>
+        <div class="rep-seg">
+          <span class="seg" data-level="low">偏低</span>
+          <span class="seg selected" data-level="normal">正常</span>
+          <span class="seg" data-level="high">偏高</span>
+        </div>
+      </div>`).join('');
+    testsBox.querySelectorAll('.rep-seg .seg').forEach(el => {
+      el.addEventListener('click', () => {
+        const box = el.closest('.rep-seg');
+        box.querySelectorAll('.seg').forEach(x => x.classList.remove('selected'));
+        el.classList.add('selected');
+      });
+    });
+
+    /* 提交生成 */
+    async function submit() {
+      if (!state.gender) return App.toast('请先选择性别');
+      if (!state.ageGroup) return App.toast('请先选择年龄段');
+
+      const report = {};
+      testsBox.querySelectorAll('.rep-item').forEach(item => {
+        const sel = item.querySelector('.rep-seg .seg.selected');
+        if (sel && sel.dataset.level !== 'normal') report[item.dataset.key] = sel.dataset.level;
+      });
+
+      const btn = $('#btnSubmit');
+      btn.disabled = true;
+      btn.classList.add('loading');
+      btn.innerHTML = '<span class="spinner sm"></span> 正在分析你的报告…';
+
+      try {
+        const profile = { gender: state.gender, ageGroup: state.ageGroup, conditions: [], events: [] };
+        const res = await API.recommendNutrients(profile, report);
+        const record = {
+          ...res.data,
+          kind: 'report',
+          itemNames: res.data.items.map(i => i.name),
+          topName: res.data.items[0] ? res.data.items[0].name : '',
+          count: res.data.items.length
+        };
+        const saved = await API.saveRecord(record);
+        location.href = 'result.html?r=' + saved.data.id;
+      } catch (e) {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btn.innerHTML = '<i class="icon ico-18" data-icon="sparkles"></i> 生成营养推荐';
+        App.mountIcons(document);
+        App.toast('生成失败，请重试');
+      }
+    }
+    $('#btnSubmit').addEventListener('click', submit);
+  </script>
+</body>
+</html>

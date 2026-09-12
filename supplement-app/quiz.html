@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>智能测评 · 拾养</title>
+  <link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body data-page="quiz">
+  <div class="app tab-shell">
+
+    <header class="topbar">
+      <span class="tb-title">智能测评</span>
+      <span class="tb-spacer"></span>
+      <span class="tb-action" id="btnReset" title="重新填写"><i class="icon ico-18" data-icon="refresh-cw"></i></span>
+    </header>
+
+    <div class="page">
+      <!-- 进度 -->
+      <div class="progress-wrap rv">
+        <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+        <div class="progress-label" id="progressLabel">第 1 / 4 步 · 基础信息</div>
+      </div>
+
+      <!-- 步骤容器 -->
+      <div id="stepsBox">
+
+        <!-- 第 1 步：基础信息 -->
+        <div class="quiz-step active" id="step-1">
+          <h2 class="step-title">先认识一下你</h2>
+          <p class="step-sub">性别与年龄会直接影响营养素需求，请如实选择。</p>
+
+          <div class="seg-row" style="margin-bottom:20px" id="genderSeg">
+            <div class="seg" data-key="female">
+              <span class="seg-ico"><i class="icon ico-22" data-icon="heart"></i></span>
+              <span>女性</span>
+            </div>
+            <div class="seg" data-key="male">
+              <span class="seg-ico"><i class="icon ico-22" data-icon="activity"></i></span>
+              <span>男性</span>
+            </div>
+          </div>
+
+          <p class="step-sub">你的年龄段</p>
+          <div class="chip-group" id="ageChips"></div>
+        </div>
+
+        <!-- 第 2 步：身体状况 -->
+        <div class="quiz-step" id="step-2">
+          <h2 class="step-title">最近身体状态如何？</h2>
+          <p class="step-sub">可多选；如有身体不适，建议优先就医排查原因。</p>
+          <div class="chip-group" id="condChips"></div>
+          <p class="step-optional"><i class="icon ico-16" data-icon="info"></i> 选「无明显不适」将清空其他选项</p>
+        </div>
+
+        <!-- 第 3 步：近期事件 -->
+        <div class="quiz-step" id="step-3">
+          <h2 class="step-title">近期经历过什么？</h2>
+          <p class="step-sub">手术、孕育、节食等事件会明显改变营养需求，可多选。</p>
+          <div class="chip-group" id="eventChips"></div>
+          <p class="step-optional" id="eventHint" style="display:none"><i class="icon ico-16" data-icon="info"></i> 产后/孕期/哺乳期选项仅女性可见</p>
+          <p class="step-optional"><i class="icon ico-16" data-icon="info"></i> 选「以上都没有」将清空其他选项</p>
+        </div>
+
+        <!-- 第 4 步：确认 -->
+        <div class="quiz-step" id="step-4">
+          <h2 class="step-title">确认你的档案</h2>
+          <p class="step-sub">我们会基于这些信息生成个性化营养补充方案。</p>
+          <div class="summary-box" id="summaryBox"></div>
+        </div>
+
+        <!-- 生成 loading 态 -->
+        <div class="quiz-step" id="step-generating">
+          <div class="generating">
+            <div class="spinner"></div>
+            <h3>正在分析你的营养需求</h3>
+            <p>结合性别、年龄与近期事件，逐一匹配营养素…</p>
+            <div class="gen-line">
+              <i></i><i style="width:82%"></i><i style="width:66%"></i><i style="width:90%"></i>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 底部操作 -->
+      <div class="quiz-actions" id="quizActions"></div>
+
+      <p class="disclaimer-line">测评结果仅供营养知识参考，不构成医疗建议。</p>
+    </div>
+
+    <!-- 底部 Tab 栏（三页一致，勿改动） -->
+    <nav class="tabbar">
+      <a class="tab" data-tab="home" href="index.html"><span class="tab-ico"><i class="icon ico-20" data-icon="home"></i></span>首页</a>
+      <a class="tab" data-tab="quiz" href="quiz.html"><span class="tab-ico"><i class="icon ico-20" data-icon="clipboard-list"></i></span>测评</a>
+      <a class="tab" data-tab="profile" href="profile.html"><span class="tab-ico"><i class="icon ico-20" data-icon="user"></i></span>我的</a>
+    </nav>
+  </div>
+
+  <script src="mock.js?v=2"></script>
+  <script src="api.js?v=2"></script>
+  <script src="app.js?v=2"></script>
+  <script>
+    const state = { gender: null, ageGroup: null, conditions: [], events: [] };
+    let currentStep = 1;
+    const TOTAL = 4;
+
+    const $ = id => document.getElementById(id);
+    const stepEls = ['step-1', 'step-2', 'step-3', 'step-4'].map(id => $(id));
+
+    /* ---------- 渲染选项 ---------- */
+    function chipHTML(label, key) {
+      return `<span class="chip" data-key="${key}">
+        <span class="chip-mark"><i class="icon ico-16" data-icon="check"></i></span>${App.esc(label)}</span>`;
+    }
+
+    $('ageChips').innerHTML = DB.ageGroups.map(a => chipHTML(a.label, a.key)).join('');
+    $('condChips').innerHTML = [...DB.conditions.map(c => chipHTML(c.label, c.key)), chipHTML('无明显不适', '__none')].join('');
+
+    /* 近期事件：按性别过滤（genders 缺省=不限，['female']=仅女性可选） */
+    function renderEventChips() {
+      const gender = $('genderSeg').querySelector('.seg.selected')?.dataset.key || null;
+      const allowed = DB.events.filter(e => !e.genders || !gender || e.genders.includes(gender));
+      const hidden = DB.events.filter(e => e.genders && gender && !e.genders.includes(gender));
+
+      /* 清除因性别变更而失效的选中 */
+      state.events = state.events.filter(k => allowed.some(e => e.key === k));
+
+      $('eventChips').innerHTML = [...allowed.map(e => chipHTML(e.label, e.key)), chipHTML('以上都没有', '__none')].join('');
+      state.events.forEach(k => {
+        const chip = $('eventChips').querySelector(`.chip[data-key="${k}"]`);
+        if (chip) chip.classList.add('selected');
+      });
+
+      /* 存在被隐藏的选项时给一句轻提示 */
+      const hint = $('eventHint');
+      hint.style.display = hidden.length ? 'flex' : 'none';
+      App.mountIcons($('eventChips'));
+    }
+    renderEventChips();
+    App.mountIcons($('stepsBox'));
+
+    /* ---------- 交互 ---------- */
+    function toggleSelected(chip) {
+      const key = chip.dataset.key;
+      if (chip.classList.contains('seg')) {
+        chip.parentElement.querySelectorAll('.seg').forEach(s => s.classList.toggle('selected', s === chip));
+        return;
+      }
+      const group = chip.parentElement.id; // genderSeg / ageChips / condChips / eventChips
+      if (key === '__none') {
+        if (group === 'condChips') { state.conditions = []; }
+        if (group === 'eventChips') { state.events = []; }
+        chip.parentElement.querySelectorAll('.chip').forEach(c => c.classList.toggle('selected', c === chip));
+      } else {
+        const noneChip = chip.parentElement.querySelector('.chip[data-key="__none"]');
+        if (noneChip) noneChip.classList.remove('selected');
+        chip.classList.toggle('selected');
+      }
+    }
+    function syncState() {
+      state.gender = $('genderSeg').querySelector('.seg.selected')?.dataset.key || null;
+      state.ageGroup = $('ageChips').querySelector('.chip.selected')?.dataset.key || null;
+      state.conditions = [...$('condChips').querySelectorAll('.chip.selected')].map(c => c.dataset.key).filter(k => k !== '__none');
+      state.events = [...$('eventChips').querySelectorAll('.chip.selected')].map(c => c.dataset.key).filter(k => k !== '__none');
+    }
+
+    /* 事件委托：兼容动态渲染的 chips；性别变更时联动过滤事件选项 */
+    document.getElementById('stepsBox').addEventListener('click', (e) => {
+      const el = e.target.closest('.seg, .chip');
+      if (!el) return;
+      toggleSelected(el);
+      syncState();
+      if (el.closest('#genderSeg')) renderEventChips();
+      renderActions();
+    });
+
+    /* ---------- 步骤控制 ---------- */
+    function showStep(n) {
+      currentStep = n;
+      stepEls.forEach((el, i) => el.classList.toggle('active', i === n - 1));
+      const labels = ['基础信息', '身体状况', '近期事件', '确认档案'];
+      $('progressBar').style.width = (n / TOTAL * 100) + '%';
+      $('progressLabel').textContent = `第 ${n} / ${TOTAL} 步 · ${labels[n - 1]}`;
+      if (n === 4) renderSummary();
+      renderActions();
+      document.querySelector('.app').scrollTo ? document.querySelector('.app').scrollTo(0, 0) : window.scrollTo(0, 0);
+    }
+
+    function renderActions() {
+      const box = $('quizActions');
+      if (currentStep === 1) {
+        box.innerHTML = `<button class="btn btn-primary btn-block" id="btnNext">下一步 <i class="icon ico-18" data-icon="chevron-right"></i></button>`;
+        const btn = $('btnNext');
+        btn.disabled = !(state.gender && state.ageGroup);
+        btn.addEventListener('click', () => showStep(2));
+      } else if (currentStep === 2) {
+        box.innerHTML = `<button class="btn btn-ghost" id="btnPrev"><i class="icon ico-18" data-icon="chevron-left"></i> 上一步</button>
+                         <button class="btn btn-primary" id="btnNext">下一步 <i class="icon ico-18" data-icon="chevron-right"></i></button>`;
+        $('btnPrev').addEventListener('click', () => showStep(1));
+        $('btnNext').addEventListener('click', () => showStep(3));
+      } else if (currentStep === 3) {
+        box.innerHTML = `<button class="btn btn-ghost" id="btnPrev"><i class="icon ico-18" data-icon="chevron-left"></i> 上一步</button>
+                         <button class="btn btn-primary" id="btnNext">下一步 <i class="icon ico-18" data-icon="chevron-right"></i></button>`;
+        $('btnPrev').addEventListener('click', () => showStep(2));
+        $('btnNext').addEventListener('click', () => showStep(4));
+      } else {
+        box.innerHTML = `<button class="btn btn-ghost" id="btnPrev"><i class="icon ico-18" data-icon="chevron-left"></i> 上一步</button>
+                         <button class="btn btn-accent" id="btnSubmit"><i class="icon ico-18" data-icon="sparkles"></i> 生成推荐报告</button>`;
+        $('btnPrev').addEventListener('click', () => showStep(3));
+        $('btnSubmit').addEventListener('click', submit);
+      }
+      App.mountIcons(box);
+    }
+
+    function renderSummary() {
+      const gLabel = DB.labelOf('gender', state.gender);
+      const aLabel = DB.labelOf('ageGroups', state.ageGroup);
+      const parts = [
+        [gLabel, aLabel].filter(Boolean).join(' · '),
+        state.conditions.length ? '身体信号：' + state.conditions.map(k => DB.labelOf('conditions', k)).join('、') : '',
+        state.events.length ? '近期事件：' + state.events.map(k => DB.labelOf('events', k)).join('、') : ''
+      ].filter(Boolean);
+      $('summaryBox').innerHTML = `
+        <b style="color:var(--text)">你的营养档案</b>
+        <ul>
+          ${parts.map(p => `<li><span class="dot"></span><span>${App.esc(p)}</span></li>`).join('')}
+        </ul>`;
+    }
+
+    /* ---------- 提交生成 ---------- */
+    async function submit() {
+      syncState();
+      stepEls.forEach(el => el.classList.remove('active'));
+      $('step-generating').classList.add('active');
+      $('quizActions').innerHTML = '';
+      App.mountIcons($('stepsBox'));
+      window.scrollTo(0, 0);
+
+      const profile = {
+        gender: state.gender, ageGroup: state.ageGroup,
+        conditions: state.conditions, events: state.events
+      };
+      API.setCurrentProfile(profile);
+
+      try {
+        const res = await API.recommendNutrients(profile);
+        const record = {
+          ...res.data,
+          itemNames: res.data.items.map(i => i.name),
+          topName: res.data.items[0] ? res.data.items[0].name : '',
+          count: res.data.items.length
+        };
+        const saved = await API.saveRecord(record);
+        location.href = 'result.html?r=' + saved.data.id;
+      } catch (e) {
+        App.toast('生成失败，请重试');
+        showStep(4);
+      }
+    }
+
+    /* ---------- 场景预填 ---------- */
+    function applyScene() {
+      const scene = new URLSearchParams(location.search).get('scene');
+      if (!scene) return false;
+      const s = DB.scenes.find(x => x.key === scene);
+      if (!s) return false;
+      const p = s.prefill || {};
+      if (p.gender) $('genderSeg').querySelector(`.seg[data-key="${p.gender}"]`).classList.add('selected');
+      if (p.ageGroup) $('ageChips').querySelector(`.chip[data-key="${p.ageGroup}"]`).classList.add('selected');
+      (p.conditions || []).forEach(k => $('condChips').querySelector(`.chip[data-key="${k}"]`).classList.add('selected'));
+      renderEventChips(); // 先按预填性别过滤可用事件，再勾选
+      (p.events || []).forEach(k => {
+        const chip = $('eventChips').querySelector(`.chip[data-key="${k}"]`);
+        if (chip) chip.classList.add('selected');
+      });
+      syncState();
+      showStep(4); // 预填后直接跳到确认页
+      return true;
+    }
+
+    /* ---------- 重置 ---------- */
+    $('btnReset').addEventListener('click', () => {
+      document.querySelectorAll('.seg.selected, .chip.selected').forEach(el => el.classList.remove('selected'));
+      state.gender = null; state.ageGroup = null; state.conditions = []; state.events = [];
+      showStep(1);
+      App.toast('已清空，重新填写');
+    });
+
+    if (!applyScene()) showStep(1);
+  </script>
+</body>
+</html>

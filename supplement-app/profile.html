@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>我的 · 拾养</title>
+  <link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body data-page="profile">
+  <div class="app tab-shell">
+
+    <header class="topbar">
+      <span class="tb-title">我的</span>
+    </header>
+
+    <div class="page">
+      <!-- 用户卡片 -->
+      <div class="user-card rv">
+        <div class="avatar">满</div>
+        <div style="flex:1;min-width:0">
+          <div class="user-name">安小满</div>
+          <div class="user-desc">营养观察员 · 关注每一餐的细节</div>
+          <div class="user-stats">
+            <div><b id="statCount">0</b><span>次测评</span></div>
+            <div><b id="statDirs">0</b><span>个关注方向</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 历史测评 -->
+      <section class="section rv" style="--d:.08s">
+        <div class="section-head">
+          <h2 class="section-title">历史测评</h2>
+          <span class="section-more" id="historyCount"></span>
+        </div>
+        <div class="card" id="historyBox"></div>
+      </section>
+
+      <!-- 更多 -->
+      <section class="section rv" style="--d:.16s">
+        <div class="section-head"><h2 class="section-title">更多</h2></div>
+        <div class="card">
+          <div class="accordion-item menu-item" data-acc="about">
+            <span class="menu-ico"><i class="icon ico-18" data-icon="book-open"></i></span>
+            <div style="flex:1"><b>关于拾养</b><span>这个演示原型做了什么</span></div>
+            <span class="chev"><i class="icon ico-18" data-icon="chevron-down"></i></span>
+          </div>
+          <div class="accordion-body" id="acc-about">
+            拾养是一款营养补品推荐小程序的高保真原型。它根据性别、年龄、身体状况与近期事件（手术、孕育、健身等），
+            从营养学知识库中匹配值得优先补充的营养素，并给出食物来源与演示用补品商品。当前所有数据均为本地 mock，不涉及真实诊疗与商品销售。
+          </div>
+          <div class="accordion-item menu-item" data-acc="disclaimer">
+            <span class="menu-ico"><i class="icon ico-18" data-icon="shield"></i></span>
+            <div style="flex:1"><b>免责声明</b><span>内容仅供科普参考</span></div>
+            <span class="chev"><i class="icon ico-18" data-icon="chevron-down"></i></span>
+          </div>
+          <div class="accordion-body" id="acc-disclaimer">
+            本应用生成的所有营养建议均为演示用虚构数据。营养知识参考《中国居民膳食营养素参考摄入量（DRIs）》《中国居民膳食指南》等公开指南与科普资料简化整理，仅供科普学习，不构成医疗诊断、治疗或用药建议，也不能替代个体化诊疗。
+            商品信息为虚构演示数据，不代表真实在售商品。
+            孕期、哺乳期、慢性疾病患者及正在服药人群，补充任何营养素前请务必咨询医生或注册营养师；如有不适请及时就医。
+          </div>
+          <div class="menu-item" id="btnClear">
+            <span class="menu-ico" style="background:#F6EFDB;color:var(--danger)"><i class="icon ico-18" data-icon="trash-2"></i></span>
+            <div style="flex:1"><b>清除本地数据</b><span>删除所有测评记录</span></div>
+            <span class="chev"><i class="icon ico-18" data-icon="chevron-right"></i></span>
+          </div>
+        </div>
+      </section>
+
+      <p class="disclaimer-line">拾养 SHIYANG · 营养知识演示原型</p>
+    </div>
+
+    <!-- 底部 Tab 栏（三页一致，勿改动） -->
+    <nav class="tabbar">
+      <a class="tab" data-tab="home" href="index.html"><span class="tab-ico"><i class="icon ico-20" data-icon="home"></i></span>首页</a>
+      <a class="tab" data-tab="quiz" href="quiz.html"><span class="tab-ico"><i class="icon ico-20" data-icon="clipboard-list"></i></span>测评</a>
+      <a class="tab" data-tab="profile" href="profile.html"><span class="tab-ico"><i class="icon ico-20" data-icon="user"></i></span>我的</a>
+    </nav>
+  </div>
+
+  <script src="mock.js?v=2"></script>
+  <script src="api.js?v=2"></script>
+  <script src="app.js?v=2"></script>
+  <script>
+    const historyBox = document.getElementById('historyBox');
+
+    function historyItemHTML(r) {
+      return `
+      <div class="history-item" data-id="${r.id}">
+        <span class="hist-ico"><i class="icon ico-18" data-icon="clock"></i></span>
+        <div class="hist-info" style="min-width:0;flex:1">
+          <b>${App.fmtDate(r.date)} ${r.kind === 'report' ? '报告推荐' : '测评'}</b>
+          <span>推荐 ${r.count} 项 · 首推 ${App.esc(r.topName)}</span>
+        </div>
+        <span class="hist-del" data-del="${r.id}" aria-label="删除"><i class="icon ico-18" data-icon="trash-2"></i></span>
+      </div>`;
+    }
+
+    async function renderHistory() {
+      const res = await API.getHistory();
+      const list = res.data;
+      document.getElementById('historyCount').textContent = list.length ? `${list.length} 条` : '';
+      document.getElementById('statCount').textContent = list.length;
+      const dirs = new Set();
+      list.forEach(r => (r.itemNames || []).forEach(n => dirs.add(n)));
+      document.getElementById('statDirs').textContent = dirs.size;
+
+      if (!list.length) {
+        historyBox.innerHTML = `<div class="empty">
+          <span class="empty-ico"><i class="icon ico-22" data-icon="clipboard-list"></i></span>
+          <p>还没有测评记录<br>完成一次测评，方案会保存在这里</p>
+          <a class="btn btn-primary btn-sm" href="quiz.html">去测评</a>
+        </div>`;
+      } else {
+        historyBox.innerHTML = list.map(historyItemHTML).join('');
+      }
+      App.mountIcons(historyBox);
+
+      /* 点击查看记录 */
+      historyBox.querySelectorAll('.history-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          if (e.target.closest('[data-del]')) return; // 交给删除
+          location.href = 'result.html?r=' + item.dataset.id;
+        });
+      });
+      /* 删除记录 */
+      historyBox.querySelectorAll('[data-del]').forEach(del => {
+        del.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await API.deleteRecord(del.dataset.del);
+          App.toast('记录已删除');
+          renderHistory();
+        });
+      });
+    }
+
+    /* 折叠面板 */
+    document.querySelectorAll('[data-acc]').forEach(item => {
+      item.addEventListener('click', () => {
+        item.classList.toggle('open');
+      });
+    });
+
+    /* 清除本地数据 */
+    document.getElementById('btnClear').addEventListener('click', () => {
+      localStorage.removeItem('sy.history');
+      localStorage.removeItem('sy.records');
+      localStorage.removeItem('sy.currentProfile');
+      App.toast('本地数据已清除');
+      renderHistory();
+    });
+
+    renderHistory();
+  </script>
+</body>
+</html>
