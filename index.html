@@ -515,21 +515,21 @@ function cacheQuotes(list){ if(list&&list.length) LS.set(LS_CQUOTE, list); }
 const DEFAULT_FUNDS_DATA = [
   {
     code:'024473', name:'信澳优势A', manager:'吴清宇', type:'主动股混',
-    method:'直接加权', report:'2026Q2', coverage:81.32,
-    // 逐基金校准（样本外验证真改善才启用）：校准估值 = alpha + beta×原估值。
-    // 仅 024473 启用；其他基金误差源于代理错配，校准反而过拟合，保持原方法。
-    calib:{ alpha:0.08, beta:1.067 },
-    formula:'估值 = Σ(占净值比×个股实时涨跌幅)  覆盖率 81.32%',
+    method:'混合法（直权×0.6 + 归一×0.4）', report:'2026Q2', reportDate:'2026-06-30', coverage:93.19,
+    formula:'估值 = 直权Σ(w×p)×0.6 + 归一化(直权÷93.19%)×0.4（主动股混调仓快，用混合法缓冲未覆盖偏差）',
+    mix:[0.6,0.4],
     holdings:[
       ['sz301086','鸿富瀚',9.68],['sz002980','华盛昌',9.57],['sz301128','强瑞技术',9.57],
       ['sz300502','新易盛',9.44],['sz300308','中际旭创',9.43],['sz002384','东山精密',8.85],
       ['sh688668','鼎通科技',7.76],['sz300223','北京君正',6.35],['sz300671','富满微',5.39],
-      ['sh688627','精智达',5.28]
+      ['sh688627','精智达',5.28],['sz301526','国际复材',4.52],['sz301603','乔锋智能',3.25],
+      ['sh600105','永鼎股份',2.02],['sh603256','宏和科技',1.68],['sh688795','摩尔线程',0.25],
+      ['sh688802','沐曦股份',0.15]
     ]
   },
   {
     code:'008920', name:'永赢科技C', manager:'李文宾', type:'主动股混',
-    method:'混合法（Q2推荐）', report:'2026Q2', coverage:47.48,
+    method:'混合法（Q2推荐）', report:'2026Q2', reportDate:'2026-06-30', coverage:47.48,
     formula:'est = Q2直权×0.35 + 归一化×0.65；覆盖率47.48%（基于Q2历史回测最优权重）',
     holdings:[
       ['sh603986','兆易创新',7.59],['sz300223','北京君正',6.83],['sz300475','香农芯创',4.76],
@@ -554,11 +554,12 @@ const DEFAULT_FUNDS_DATA = [
   { code:'023639', name:'国泰电网C', manager:'—', type:'联接基金', method:'ETF行情(561380)',
     report:'2026Q2', coverage:100, etf:'sh561380', etfName:'电网设备ETF', formula:'底层 ETF 561380 实时涨跌幅', holdings:[], industries:[] },
   { code:'000051', name:'华夏沪深300ETF', manager:'—', type:'联接基金', method:'ETF行情(510330)',
-    report:'2026Q2', coverage:100, etf:'sh510330', etfName:'沪深300ETF华夏', formula:'底层 ETF 510330 实时涨跌幅', holdings:[], industries:[] }
+    report:'2026Q2', reportDate:'2026-06-30', coverage:100, etf:'sh510330', etfName:'沪深300ETF华夏', formula:'底层 ETF 510330 实时涨跌幅', holdings:[], industries:[] }
 ];
 
 let FUNDS = JSON.parse(JSON.stringify(DEFAULT_FUNDS_DATA));
 const quoteMap = {};
+const biasSummary = {};  // { code: {mae, meanBias, maeRecent10, worstDay, lastDate} }
 
 const fmt = n => isFinite(n) ? n.toFixed(2) : '--';
 const sign = n => (n>0?'+':'') + fmt(n) + '%';
@@ -653,7 +654,15 @@ function credScore(f, est){
   else if(f.industries) score+=8;
   else score+=12;
 
-  score += f.report?.startsWith('2026Q2')?5:3;
+  // 时效（动态：距披露日越久分越低）
+  let ageScore = 5;
+  if(f.reportDate){
+    const days = Math.floor((Date.now() - new Date(f.reportDate))/86400000);
+    if(days > 120){ ageScore = -3; reasons.push('持仓超4个月，大概率过期'); }
+    else if(days > 90){ ageScore = 0; reasons.push('持仓超3个月'); }
+    else if(days > 60){ ageScore = 2; reasons.push('持仓超2个月'); }
+  }
+  score += ageScore;
 
   score = Math.min(100, Math.max(0, score));
   const level = score>=80?'高':(score>=55?'中':'低');
@@ -670,12 +679,29 @@ function sixDim(f, est){
   const dispersion = maxW>=10 ? {v:{t:'偏高',c:'warn'}, s:'第一大 '+fmt(maxW)+'%'} : {v:{t:'适中',c:'ok'}, s:'第一大 '+fmt(maxW)+'%'};
   const superRisk = maxW>=15 ? {v:{t:'⚠ 高',c:'warn'}, s:topW+' '+fmt(maxW)+'%'} : {v:{t:'✓ 低',c:'ok'}, s:'<15%'};
   const c = credScore(f, est);
+  // 持仓时效天数
+  let ageStr=f.report+' 季报', ageC='ok';
+  if(f.reportDate){
+    const days=Math.floor((Date.now()-new Date(f.reportDate))/86400000);
+    ageStr=days+'天';
+    ageC = days>120?'bad':(days>90?'warn':'ok');
+  }
+  // 历史偏差
+  const bs = biasSummary[f.code];
+  let biasVal='—', biasC='ok', biasSub='无历史';
+  if(bs){
+    biasVal = (bs.maeRecent10 != null ? bs.maeRecent10 : bs.mae).toFixed(2)+'pp';
+    biasSub = '样本 '+bs.n+' 天';
+    if(bs.maeRecent10 != null && bs.maeRecent10 > 0.8) biasC='bad';
+    else if(bs.maeRecent10 != null && bs.maeRecent10 > 0.4) biasC='warn';
+  }
   return [
-    {k:'覆盖率', val:cov+'%', c:'ok', sub: f.etf?'底层ETF':('前十大 '+(f.holdings||[]).length+' 只')},
-    {k:'持仓时效', val:'✓', c:'ok', sub:f.report+' 季报'},
+    {k:'覆盖率', val:cov+'%', c:'ok', sub: f.etf?'底层ETF':('持仓 '+(f.holdings||[]).length+' 只')},
+    {k:'持仓时效', val:ageStr, c:ageC, sub:f.report+' 披露'},
     {k:'权重离散', val:dispersion.v.t, c:dispersion.v.c, sub:dispersion.s},
     {k:'超级权重', val:superRisk.v.t, c:superRisk.v.c, sub:superRisk.s},
     {k:'行情完整', val:Math.round((est.breakdown?.rows||est.breakdown?.ind||est.breakdown?.e||[]).filter(r=>r.pct!==null).length)+'/'+((est.breakdown?.rows||est.breakdown?.ind||est.breakdown?.e||[]).length), c:'ok', sub:'实时行情'},
+    {k:'历史偏差', val:biasVal, c:biasC, sub:biasSub},
     {k:'综合置信', val:c.level, c:c.color==='good'?'ok':(c.color==='mid'?'warn':'bad'), sub:c.score+' 分'}
   ];
 }
@@ -1160,6 +1186,34 @@ const navState = {
   snapshots: LS.get(LS_SNAP, []),
   actuals: {},
   feedback: LS.get(LS_FB, []),
+  // 历史偏差摘要（供六维评价「历史偏差」维度使用）
+  _biasSummary: {},
+  calcBiasSummary(){
+    const recs = (this.feedback||[]).filter(r => !['manual','test'].includes(r.source) && r.estimatePct != null);
+    const byCode = {};
+    recs.forEach(r => { if(!byCode[r.code]) byCode[r.code]={rows:[]}; byCode[r.code].rows.push(r); });
+    const summary = {};
+    Object.values(byCode).forEach(g => {
+      g.rows.sort((a,b)=>a.date.localeCompare(b.date));
+      const biasc = g.rows.map(r => r.estimatePct - r.actualPct);
+      const abs = biasc.map(Math.abs);
+      const N = biasc.length;
+      const recent = g.rows.slice(-10);
+      const recentAbs = recent.map(r => Math.abs(r.estimatePct - r.actualPct));
+      const maxIdx = abs.indexOf(Math.max(...abs));
+      summary[g.rows[0].code] = {
+        name: g.rows[0].name, n: N,
+        mae: Math.round(abs.reduce((s,x)=>s+x,0)/N*100)/100,
+        meanBias: Math.round(biasc.reduce((s,x)=>s+x,0)/N*100)/100,
+        maeRecent10: recentAbs.length ? Math.round(recentAbs.reduce((s,x)=>s+x,0)/recentAbs.length*100)/100 : null,
+        worstDay: { date: g.rows[maxIdx].date, bias: Math.round(biasc[maxIdx]*100)/100 }
+      };
+    });
+    this._biasSummary = summary;
+    // 同步到全局 biasSummary（供 sixDim 使用）
+    for(const k in biasSummary) delete biasSummary[k];
+    Object.assign(biasSummary, summary);
+  },
   histQuotes: {},
   historyDays: 10
 };
@@ -1314,7 +1368,7 @@ async function fetchActualsDirect(codes, days){
   return { ok:true, days, list:out };
 }
 function fetchActuals(){
-  let days = navState.historyDays + 10; if(days>60) days=60;
+  navState.calcBiasSummary();\nlet days = navState.historyDays + 10; if(days>60) days=60;
   const codes = FUNDS.map(f=>f.code).join(',');
   const btn=document.getElementById('navFetchBtn'); if(btn) btn.disabled=true;
   return fetchActualsDirect(codes, days)
