@@ -1368,7 +1368,8 @@ async function fetchActualsDirect(codes, days){
   return { ok:true, days, list:out };
 }
 function fetchActuals(){
-  navState.calcBiasSummary();\nlet days = navState.historyDays + 10; if(days>60) days=60;
+  navState.calcBiasSummary();
+  let days = navState.historyDays + 10; if(days>60) days=60;
   const codes = FUNDS.map(f=>f.code).join(',');
   const btn=document.getElementById('navFetchBtn'); if(btn) btn.disabled=true;
   return fetchActualsDirect(codes, days)
