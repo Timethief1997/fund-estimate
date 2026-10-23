@@ -819,6 +819,7 @@ function renderFF(inRows, outRows, suffix){
 }
 async function loadFundFlow(){
   const st=document.getElementById('ffStats');
+  if(!st) return;
   st.innerHTML = '<span style="color:var(--tx2)">资金流向加载中…</span>';
   try{
     const [inRows,outRows]=await Promise.all([
@@ -864,6 +865,7 @@ function renderFFList(id, rows){
 // ============ 大盘资金流（新浪个股主力榜 Top100 聚合，直连） ============
 async function loadMarketFlow(){
   const el=document.getElementById('marketFlow');
+  if(!el) return;
   el.innerHTML='<span style="color:var(--tx2)">大盘资金加载中…</span>';
   const renderMarket=(j,suffix)=>{
     const yi=v=>(v/1e8).toFixed(2);
@@ -922,6 +924,7 @@ const SECTOR_ETFS = [
 const SECTOR_NAMES={}; SECTOR_ETFS.forEach(e=>SECTOR_NAMES[e.code]=e.name);
 async function loadSectorFlow(){
   const el=document.getElementById('sectorFlow');
+  if(!el) return;
   el.innerHTML='<span style="color:var(--tx2)">板块资金加载中…</span>';
   try{
     const qs=await quoteSource(SECTOR_ETFS.map(e=>e.code));
