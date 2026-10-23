@@ -1692,6 +1692,7 @@ function initNavPanel(){
   loadOptimLogs();
   return loadSnapshots().then(loadFeedback).then(fetchActuals).then(fetchHistQuotes).then(()=>renderHistory());
 }
+load();
 initNavPanel();
 </script>
 </body>
